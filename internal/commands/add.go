@@ -326,8 +326,22 @@ func handleIdenticalAsset(ctx context.Context, out *outputHelper, status *compon
 	out.println()
 	out.printf("✓ Asset %s@%s already exists in vault with identical contents\n", name, version)
 
-	// Skip lock file update if --no-install
+	// Build lock asset
+	lockAsset := &lockfile.Asset{
+		Name:    name,
+		Version: version,
+		Type:    assetType,
+		SourcePath: &lockfile.SourcePath{
+			Path: fmt.Sprintf("./assets/%s/%s", name, version),
+		},
+	}
+
+	// --no-install: still write lock file (global scope) but skip install prompt
 	if opts.NoInstall {
+		lockAsset.Scopes = []lockfile.Scope{}
+		if err := updateLockFile(ctx, out, vault, lockAsset); err != nil {
+			return fmt.Errorf("failed to update lock file: %w", err)
+		}
 		return nil
 	}
 
@@ -355,17 +369,7 @@ func handleIdenticalAsset(ctx context.Context, out *outputHelper, status *compon
 		}
 	}
 
-	// Update the lock file with asset
-	lockAsset := &lockfile.Asset{
-		Name:    name,
-		Version: version,
-		Type:    assetType,
-		SourcePath: &lockfile.SourcePath{
-			Path: fmt.Sprintf("./assets/%s/%s", name, version),
-		},
-		Scopes: scopes,
-	}
-
+	lockAsset.Scopes = scopes
 	if err := updateLockFile(ctx, out, vault, lockAsset); err != nil {
 		return fmt.Errorf("failed to update lock file: %w", err)
 	}
@@ -419,8 +423,12 @@ func addNewAsset(ctx context.Context, out *outputHelper, status *components.Stat
 
 	out.printf("✓ Successfully added %s@%s\n", meta.Asset.Name, meta.Asset.Version)
 
-	// Skip lock file update if --no-install
+	// --no-install: still write lock file (global scope) but skip install prompt
 	if opts.NoInstall {
+		lockAsset.Scopes = []lockfile.Scope{}
+		if err := updateLockFile(ctx, out, vault, lockAsset); err != nil {
+			return fmt.Errorf("failed to update lock file: %w", err)
+		}
 		return nil
 	}
 
