@@ -13,11 +13,6 @@ import (
 	"github.com/sleuth-io/sx/internal/ui/components"
 )
 
-const (
-	githubOwner = "sleuth-io"
-	githubRepo  = "sx"
-)
-
 // NewUpdateCommand creates the update command
 func NewUpdateCommand() *cobra.Command {
 	var checkOnly bool
@@ -56,7 +51,7 @@ func runUpdate(cmd *cobra.Command, checkOnly bool) error {
 
 	out.printf("Current version: %s\n", buildinfo.Version)
 
-	repository := selfupdate.ParseSlug(fmt.Sprintf("%s/%s", githubOwner, githubRepo))
+	repository := selfupdate.ParseSlug(fmt.Sprintf("%s/%s", autoupdate.GithubOwner, autoupdate.GithubRepo))
 
 	if checkOnly {
 		// Just check for latest version without updating

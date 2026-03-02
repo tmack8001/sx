@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	githubOwner       = "sleuth-io"
-	githubRepo        = "sx"
+	GithubOwner       = "sleuth-io"
+	GithubRepo        = "sx"
 	checkInterval     = 24 * time.Hour
 	updateCacheFile   = "last-update-check"
 	pendingUpdateFile = "pending-update.json"
@@ -119,10 +119,10 @@ func ApplyPendingUpdate() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), updateTimeout)
 	defer cancel()
 
-	// Suppress stdout during update
+	// Suppress stdout during update (deferred to guarantee restoration on panic)
 	restoreStdout := suppressStdout()
+	defer restoreStdout()
 	err = selfupdate.UpdateTo(ctx, pending.AssetURL, pending.AssetName, execPath)
-	restoreStdout()
 
 	// Always remove the marker — if the update failed, the next background check
 	// will detect a newer version and create a new marker
@@ -189,7 +189,7 @@ func checkAndUpdate() error {
 	})
 
 	// Detect latest release
-	release, found, err := updater.DetectLatest(ctx, selfupdate.ParseSlug(fmt.Sprintf("%s/%s", githubOwner, githubRepo)))
+	release, found, err := updater.DetectLatest(ctx, selfupdate.ParseSlug(fmt.Sprintf("%s/%s", GithubOwner, GithubRepo)))
 	if err != nil {
 		// Don't update timestamp on error — allow retry next time
 		return err
@@ -215,13 +215,12 @@ func checkAndUpdate() error {
 	// Update check timestamp — we successfully checked
 	_ = updateCheckTimestamp()
 
-	// Suppress stdout during update
+	// Suppress stdout during update (deferred to guarantee restoration on panic)
 	restoreStdout := suppressStdout()
+	defer restoreStdout()
 
 	// Attempt the update — may not complete if process exits
 	err = updater.UpdateTo(ctx, release, "")
-
-	restoreStdout()
 
 	if err != nil {
 		// Marker remains for Phase 2 to retry

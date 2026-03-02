@@ -58,7 +58,9 @@ func main() {
 	// Apply any pending update from a previous background check that didn't complete.
 	// If an update was applied, re-exec so the new binary handles this invocation.
 	if autoupdate.ApplyPendingUpdate() && exe != "" {
-		_ = syscall.Exec(exe, os.Args, os.Environ())
+		if err := syscall.Exec(exe, os.Args, os.Environ()); err != nil {
+			log.Error("failed to re-exec after update", "error", err)
+		}
 	}
 
 	// Check for updates in the background (non-blocking, once per day)
