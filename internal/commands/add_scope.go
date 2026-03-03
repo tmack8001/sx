@@ -14,17 +14,17 @@ import (
 
 // scopeResult holds the result of scope prompting
 type scopeResult struct {
-	Scopes   []lockfile.Scope
-	Personal bool // "Just for me" — Sleuth vaults only
-	Remove   bool // User chose "remove from installation"
+	Scopes      []lockfile.Scope
+	ScopeEntity string // vault-specific (e.g., "personal"), empty for standard scoping
+	Remove      bool   // User chose "remove from installation"
 }
 
 // promptForRepositoriesWithUI prompts user for repository configurations using new UI
 // Takes currentRepos (nil if not installed, empty slice if global, or list of repos)
 // Returns scopeResult with Remove=true if user chooses not to install
-func promptForRepositoriesWithUI(assetName, version string, currentRepos []lockfile.Scope, currentPersonal bool, v vault.Vault, styledOut *ui.Output, ioc *components.IOContext) (*scopeResult, error) {
+func promptForRepositoriesWithUI(assetName, version string, currentRepos []lockfile.Scope, v vault.Vault, styledOut *ui.Output, ioc *components.IOContext) (*scopeResult, error) {
 	// Display current state
-	displayCurrentInstallation(currentRepos, currentPersonal, styledOut)
+	displayCurrentInstallation(currentRepos, styledOut)
 
 	styledOut.Newline()
 
@@ -53,13 +53,15 @@ func promptForRepositoriesWithUI(assetName, version string, currentRepos []lockf
 		},
 	}...)
 
-	// Add "Just for me" option if vault supports personal scope
-	if ps, ok := v.(vault.PersonalScopeSupporter); ok && ps.SupportsPersonalScope() {
-		options = append(options, components.Option{
-			Label:       "Just for me",
-			Value:       "personal",
-			Description: "Install only for your account",
-		})
+	// Add vault-specific scope options (e.g., "Just for me" for Sleuth vaults)
+	if sop, ok := v.(vault.ScopeOptionProvider); ok {
+		for _, opt := range sop.GetScopeOptions() {
+			options = append(options, components.Option{
+				Label:       opt.Label,
+				Value:       opt.Value,
+				Description: opt.Description,
+			})
+		}
 	}
 
 	options = append(options, components.Option{
@@ -75,7 +77,7 @@ func promptForRepositoriesWithUI(assetName, version string, currentRepos []lockf
 		if err.Error() == "selection cancelled" {
 			if currentRepos != nil {
 				styledOut.Info("No changes made")
-				return &scopeResult{Scopes: currentRepos, Personal: currentPersonal}, nil
+				return &scopeResult{Scopes: currentRepos}, nil
 			}
 			styledOut.Info("Cancelled")
 			return &scopeResult{Remove: true}, nil
@@ -86,7 +88,7 @@ func promptForRepositoriesWithUI(assetName, version string, currentRepos []lockf
 	switch selected.Value {
 	case "keep": // Keep current settings
 		styledOut.Success(fmt.Sprintf("%s v%s - no changes made", assetName, version))
-		return &scopeResult{Scopes: currentRepos, Personal: currentPersonal}, nil
+		return &scopeResult{Scopes: currentRepos}, nil
 
 	case "global": // Make it available globally
 		styledOut.Success("Set to global installation")
@@ -102,15 +104,20 @@ func promptForRepositoriesWithUI(assetName, version string, currentRepos []lockf
 		}
 		return &scopeResult{Scopes: scopes}, nil
 
-	case "personal": // Just for me
-		styledOut.Success("Set to personal installation (just for you)")
-		return &scopeResult{Personal: true}, nil
-
 	case "remove": // Remove from installation
 		styledOut.Info("Removing from installation (will remain available in vault)")
 		return &scopeResult{Remove: true}, nil
 
 	default:
+		// Check if the selection matches a vault-specific scope option
+		if sop, ok := v.(vault.ScopeOptionProvider); ok {
+			for _, opt := range sop.GetScopeOptions() {
+				if selected.Value == opt.Value {
+					styledOut.Success("Set to " + opt.Label)
+					return &scopeResult{ScopeEntity: selected.Value}, nil
+				}
+			}
+		}
 		return nil, errors.New("invalid selection")
 	}
 }

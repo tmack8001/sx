@@ -115,7 +115,7 @@ func handleNewAssetFromVault(ctx context.Context, cmd *cobra.Command, out *outpu
 			return err
 		}
 	} else {
-		result, err = promptForRepositories(out, assetName, latestVersion, nil, false, vault)
+		result, err = promptForRepositories(out, assetName, latestVersion, nil, vault)
 		if err != nil {
 			return fmt.Errorf("failed to configure repositories: %w", err)
 		}
@@ -135,11 +135,10 @@ func handleNewAssetFromVault(ctx context.Context, cmd *cobra.Command, out *outpu
 		SourcePath: &lockfile.SourcePath{
 			Path: fmt.Sprintf("./assets/%s/%s", assetName, latestVersion),
 		},
-		Scopes:   result.Scopes,
-		Personal: result.Personal,
+		Scopes: result.Scopes,
 	}
 
-	if err := updateLockFile(ctx, out, vault, newAsset); err != nil {
+	if err := updateLockFile(ctx, out, vault, newAsset, result.ScopeEntity); err != nil {
 		return fmt.Errorf("failed to update lock file: %w", err)
 	}
 

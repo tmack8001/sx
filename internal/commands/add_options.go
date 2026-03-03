@@ -16,28 +16,28 @@ type addOptions struct {
 	Version     string
 	ScopeGlobal bool
 	ScopeRepos  []string
-	ScopePersonal     bool // --scope-personal: install only for yourself
+	Scope       string // --scope: vault-specific scope entity (e.g., "personal")
 }
 
 // isNonInteractive returns true if any non-interactive flag is set
 func (o addOptions) isNonInteractive() bool {
-	return o.Yes || o.Name != "" || o.Type != "" || o.Version != "" || o.ScopeGlobal || len(o.ScopeRepos) > 0 || o.ScopePersonal
+	return o.Yes || o.Name != "" || o.Type != "" || o.Version != "" || o.ScopeGlobal || len(o.ScopeRepos) > 0 || o.Scope != ""
 }
 
 // getScopes returns the scopes based on flags
 // Returns: (*scopeResult, error)
-// - ScopePersonal: personal scope
+// - Scope: vault-specific scope entity (e.g., "personal")
 // - ScopeGlobal: empty slice (global install)
 // - ScopeRepos: slice with repo scopes (parsed from "repo#path1,path2" format)
 // - Neither + NoInstall: remove (vault only, no lock file update)
 // - Neither + Yes: empty slice (default to global)
 //
-// Note: Validation of mutually exclusive flags (--scope-global with --scope-repo, --scope-personal)
+// Note: Validation of mutually exclusive flags (--scope-global with --scope-repo, --scope)
 // is performed in runAddWithFlags for early error reporting. This function
 // assumes valid input.
 func (o addOptions) getScopes() (*scopeResult, error) {
-	if o.ScopePersonal {
-		return &scopeResult{Personal: true}, nil
+	if o.Scope != "" {
+		return &scopeResult{ScopeEntity: o.Scope}, nil
 	}
 	if o.ScopeGlobal {
 		return &scopeResult{Scopes: []lockfile.Scope{}}, nil

@@ -25,17 +25,12 @@ func formatPaths(paths []string) string {
 }
 
 // displayCurrentInstallation shows the current installation state of an asset
-func displayCurrentInstallation(currentRepos []lockfile.Scope, personal bool, styledOut *ui.Output) {
+func displayCurrentInstallation(currentRepos []lockfile.Scope, styledOut *ui.Output) {
 	styledOut.Newline()
 	styledOut.Info("Current installation:")
 
 	if currentRepos == nil {
 		styledOut.Println("  Not installed (available in vault only)")
-		return
-	}
-
-	if personal {
-		styledOut.Println("  → Just for me (only installed for your account)")
 		return
 	}
 

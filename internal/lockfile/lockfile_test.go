@@ -1,7 +1,6 @@
 package lockfile
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/sleuth-io/sx/internal/asset"
@@ -161,99 +160,6 @@ func TestCircularDependencies(t *testing.T) {
 	if err == nil {
 		t.Error("Expected circular dependency error, got nil")
 	}
-}
-
-func TestAssetPersonal(t *testing.T) {
-	t.Run("parse personal field from TOML", func(t *testing.T) {
-		lockFileData := []byte(`
-lock-version = "1.0"
-version = "abc123"
-created-by = "test"
-
-[[assets]]
-name = "my-skill"
-version = "1.0.0"
-type = "skill"
-personal = true
-
-[assets.source-path]
-path = "./assets/my-skill/1.0.0"
-`)
-		lf, err := Parse(lockFileData)
-		if err != nil {
-			t.Fatalf("Parse failed: %v", err)
-		}
-		if len(lf.Assets) != 1 {
-			t.Fatalf("Expected 1 asset, got %d", len(lf.Assets))
-		}
-		if !lf.Assets[0].IsPersonal() {
-			t.Error("Expected IsPersonal() = true")
-		}
-		if !lf.Assets[0].IsGlobal() {
-			t.Error("Expected IsGlobal() = true (personal with no scopes)")
-		}
-	})
-
-	t.Run("personal field round-trips through marshal", func(t *testing.T) {
-		lf := &LockFile{
-			LockVersion: "1.0",
-			Version:     "abc",
-			CreatedBy:   "test",
-			Assets: []Asset{
-				{
-					Name:     "my-skill",
-					Version:  "1.0.0",
-					Type:     asset.TypeSkill,
-					Personal: true,
-					SourcePath: &SourcePath{
-						Path: "./assets/my-skill/1.0.0",
-					},
-				},
-			},
-		}
-
-		data, err := Marshal(lf)
-		if err != nil {
-			t.Fatalf("Marshal failed: %v", err)
-		}
-
-		lf2, err := Parse(data)
-		if err != nil {
-			t.Fatalf("Parse after Marshal failed: %v", err)
-		}
-
-		if !lf2.Assets[0].IsPersonal() {
-			t.Error("Expected personal=true after round-trip")
-		}
-	})
-
-	t.Run("non-personal asset omits personal field", func(t *testing.T) {
-		lf := &LockFile{
-			LockVersion: "1.0",
-			Version:     "abc",
-			CreatedBy:   "test",
-			Assets: []Asset{
-				{
-					Name:    "my-skill",
-					Version: "1.0.0",
-					Type:    asset.TypeSkill,
-					SourcePath: &SourcePath{
-						Path: "./assets/my-skill/1.0.0",
-					},
-				},
-			},
-		}
-
-		data, err := Marshal(lf)
-		if err != nil {
-			t.Fatalf("Marshal failed: %v", err)
-		}
-
-		// personal=false should be omitted from TOML output
-		if strings.Contains(string(data), "personal") {
-			t.Error("Expected personal field to be omitted when false")
-		}
-	})
 }
 
 func TestAssetScopes(t *testing.T) {
