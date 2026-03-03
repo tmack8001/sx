@@ -32,7 +32,8 @@ type Asset struct {
 
 	// Installation configurations - array of scope installations
 	// If empty, asset is installed globally
-	Scopes []Scope `toml:"scopes,omitempty"`
+	Scopes   []Scope `toml:"scopes,omitempty"`
+	Personal bool    `toml:"personal,omitempty"` // true = installed only for current user
 }
 
 // Scope represents where an asset is installed within a repository
@@ -64,6 +65,11 @@ func (s *Scope) GetScopeType() ScopeType {
 // IsGlobal returns true if asset is installed globally (no scope restrictions)
 func (a *Asset) IsGlobal() bool {
 	return len(a.Scopes) == 0
+}
+
+// IsPersonal returns true if asset is installed only for the current user
+func (a *Asset) IsPersonal() bool {
+	return a.Personal
 }
 
 // MatchesClient returns true if the asset is compatible with the given client

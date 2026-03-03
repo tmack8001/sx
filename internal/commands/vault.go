@@ -147,6 +147,7 @@ func runVaultShow(cmd *cobra.Command, assetName string, jsonOutput bool) error {
 
 	// Check if asset is installed by looking in lock file
 	var currentScopes []lockfile.Scope
+	var currentPersonal bool
 	var scopesFound bool
 	lockFileData, _, _, err := vault.GetLockFile(ctx, "")
 	if err == nil {
@@ -154,6 +155,7 @@ func runVaultShow(cmd *cobra.Command, assetName string, jsonOutput bool) error {
 			for i := range lockFile.Assets {
 				if lockFile.Assets[i].Name == assetName {
 					currentScopes = lockFile.Assets[i].Scopes
+					currentPersonal = lockFile.Assets[i].Personal
 					scopesFound = true
 					break
 				}
@@ -164,7 +166,7 @@ func runVaultShow(cmd *cobra.Command, assetName string, jsonOutput bool) error {
 	if jsonOutput {
 		return printVaultShowJSON(out, details, scopesFound, currentScopes)
 	}
-	return printVaultShowText(out, details, scopesFound, currentScopes)
+	return printVaultShowText(out, details, scopesFound, currentScopes, currentPersonal)
 }
 
 func printVaultListText(out *outputHelper, result *vaultpkg.ListAssetsResult, typeFilter string) error {
@@ -247,7 +249,7 @@ func printVaultListJSON(out *outputHelper, result *vaultpkg.ListAssetsResult) er
 	return nil
 }
 
-func printVaultShowText(out *outputHelper, details *vaultpkg.AssetDetails, scopesFound bool, currentScopes []lockfile.Scope) error {
+func printVaultShowText(out *outputHelper, details *vaultpkg.AssetDetails, scopesFound bool, currentScopes []lockfile.Scope, currentPersonal bool) error {
 	ui := ui.NewOutput(out.cmd.OutOrStdout(), out.cmd.ErrOrStderr())
 
 	ui.Newline()
@@ -262,7 +264,7 @@ func printVaultShowText(out *outputHelper, details *vaultpkg.AssetDetails, scope
 
 	// Show installation status
 	if scopesFound {
-		displayCurrentInstallation(currentScopes, ui)
+		displayCurrentInstallation(currentScopes, currentPersonal, ui)
 	} else {
 		ui.Newline()
 		ui.Info("Installation Status:")

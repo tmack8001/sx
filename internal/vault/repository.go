@@ -92,6 +92,11 @@ type Vault interface {
 	GetBootstrapOptions(ctx context.Context) []bootstrap.Option
 }
 
+// PersonalScopeSupporter is implemented by vaults that support personal (user-only) installations
+type PersonalScopeSupporter interface {
+	SupportsPersonalScope() bool
+}
+
 // SourceHandler handles fetching assets from specific source types
 // This is used internally by Vault implementations to handle different source types
 type SourceHandler interface {

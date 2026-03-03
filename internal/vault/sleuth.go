@@ -47,6 +47,9 @@ func NewSleuthVault(serverURL, authToken string) *SleuthVault {
 	}
 }
 
+// SupportsPersonalScope returns true because SleuthVault supports per-user installations
+func (s *SleuthVault) SupportsPersonalScope() bool { return true }
+
 // Authenticate performs authentication with the Sleuth server
 func (s *SleuthVault) Authenticate(ctx context.Context) (string, error) {
 	// Token is always provided via config during initialization
@@ -880,12 +883,17 @@ func (s *SleuthVault) SetInstallations(ctx context.Context, asset *lockfile.Asse
 		}
 	}
 
+	input := map[string]any{
+		"assetName":    asset.Name,
+		"assetVersion": asset.Version,
+		"repositories": repositories,
+	}
+	if asset.Personal {
+		input["personalOnly"] = true
+	}
+
 	variables := map[string]any{
-		"input": map[string]any{
-			"assetName":    asset.Name,
-			"assetVersion": asset.Version,
-			"repositories": repositories,
-		},
+		"input": input,
 	}
 
 	var gqlResp struct {
