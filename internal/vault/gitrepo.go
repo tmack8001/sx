@@ -131,7 +131,7 @@ func (g *GitVault) GetLockFile(ctx context.Context, cachedETag string) (content 
 	// Read skill.lock from repository root
 	lockFilePath := filepath.Join(g.repoPath, constants.SkillLockFile)
 	if _, err := os.Stat(lockFilePath); os.IsNotExist(err) {
-		return nil, "", false, fmt.Errorf("%s not found in repository", constants.SkillLockFile)
+		return nil, "", false, ErrLockFileNotFound
 	}
 
 	data, err := os.ReadFile(lockFilePath)
