@@ -37,19 +37,19 @@ func NewAddCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add [source-or-asset-name]",
 		Short: "Add an asset or configure an existing one",
-		Long: `Add an asset from a local zip file, directory, URL, GitHub path, or marketplace.
+		Long: `Add an asset from a local zip file, directory, URL, GitHub path, skills.sh, or marketplace.
 If the argument is an existing asset name, configure its installation scope instead.
 
 Examples:
-  sx add ./my-skill                    # Interactive mode
-  sx add --browse                      # Browse community skills
-  sx add ./my-skill --yes              # Accept defaults, install globally
-  sx add ./my-skill -y --no-install    # Add to vault only
+  sx add anthropics/skills/frontend-design   # Add a skill from skills.sh
+  sx add vercel-labs/agent-skills            # Browse skills in a skills.sh repo
+  sx add ./my-skill                          # Interactive mode
+  sx add --browse                            # Search and browse skills.sh
+  sx add ./my-skill --yes                    # Accept defaults, install globally
+  sx add ./my-skill -y --no-install          # Add to vault only
   sx add ./my-skill --yes --scope-global
   sx add ./my-skill --yes --scope-repo git@github.com:org/repo.git
-  sx add ./my-skill --yes --scope-repo "git@github.com:org/repo.git#backend/services"
-  sx add ./my-skill --yes --scope-repo "git@github.com:org/repo.git#backend,frontend"
-  sx add ./my-skill --yes --scope personal                 # Install only for yourself (Sleuth only)`,
+  sx add ./my-skill --yes --scope personal   # Install only for yourself (Sleuth only)`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var input string
@@ -73,7 +73,7 @@ Examples:
 
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Accept all defaults and skip prompts")
 	cmd.Flags().BoolVar(&noInstall, "no-install", false, "Skip running install after adding")
-	cmd.Flags().BoolVar(&browse, "browse", false, "Browse community skills")
+	cmd.Flags().BoolVar(&browse, "browse", false, "Search and browse skills from skills.sh")
 	cmd.Flags().StringVar(&name, "name", "", "Override detected asset name")
 	cmd.Flags().StringVar(&assetType, "type", "", "Override detected asset type (skill, rule, agent, command, mcp, hook)")
 	cmd.Flags().StringVar(&version, "version", "", "Override suggested version")
@@ -143,34 +143,58 @@ func runAddWithOptions(cmd *cobra.Command, input string, opts addOptions) error 
 		}
 	}
 
-	// Check if input is plugin@marketplace syntax
-	if input != "" && IsMarketplaceReference(input) {
-		promptInstall := !opts.NoInstall && !opts.Yes
-		return addFromMarketplace(ctx, cmd, out, status, input, promptInstall, opts)
-	}
-
-	// Check if input is an existing asset name (not a file, directory, or URL)
-	if input != "" && !isURL(input) && !github.IsTreeURL(input) {
-		if _, err := os.Stat(input); os.IsNotExist(err) {
-			// Not a file/directory - check if it's an existing asset
-			return configureExistingAsset(ctx, cmd, out, status, input, opts)
+	// Try specialized handlers for specific input types
+	if input != "" {
+		if handled, err := routeSpecializedInput(ctx, cmd, out, status, input, opts); handled || err != nil {
+			return err
 		}
 	}
 
-	// Check if input is a remote MCP URL (not a zip download, not GitHub tree)
-	if input != "" && isRemoteMCPURL(input) {
-		return addRemoteMCP(ctx, cmd, out, status, input, opts)
+	// Fall through to zip-based asset add
+	return addFromZipSource(ctx, cmd, out, status, input, opts)
+}
+
+// routeSpecializedInput checks if input matches a specialized handler (skills.sh, marketplace,
+// existing asset, remote MCP, instruction file) and routes to it.
+// Returns (true, err) if handled, (false, nil) if the caller should fall through to zip handling.
+func routeSpecializedInput(ctx context.Context, cmd *cobra.Command, out *outputHelper, status *components.Status, input string, opts addOptions) (bool, error) {
+	// skills.sh reference (owner/repo or owner/repo/skill or skills.sh:...)
+	if strings.HasPrefix(input, "skills.sh:") || isSkillsShReference(input) {
+		return true, addFromSkillsSh(cmd, input, opts)
 	}
 
-	// Check if input is an instruction file (CLAUDE.md, AGENTS.md) that can be parsed for sections
-	if input != "" && isInstructionFile(input) {
+	// plugin@marketplace syntax
+	if IsMarketplaceReference(input) {
+		promptInstall := !opts.NoInstall && !opts.Yes
+		return true, addFromMarketplace(ctx, cmd, out, status, input, promptInstall, opts)
+	}
+
+	// Existing asset name (not a file, directory, or URL)
+	if !isURL(input) && !github.IsTreeURL(input) {
+		if _, err := os.Stat(input); os.IsNotExist(err) {
+			return true, configureExistingAsset(ctx, cmd, out, status, input, opts)
+		}
+	}
+
+	// Remote MCP URL
+	if isRemoteMCPURL(input) {
+		return true, addRemoteMCP(ctx, cmd, out, status, input, opts)
+	}
+
+	// Instruction file (CLAUDE.md, AGENTS.md)
+	if isInstructionFile(input) {
 		if opts.isNonInteractive() {
-			return errors.New("instruction files require interactive mode (multiple sections may need selection)")
+			return true, errors.New("instruction files require interactive mode (multiple sections may need selection)")
 		}
 		promptInstall := !opts.NoInstall
-		return addFromInstructionFile(ctx, cmd, out, status, input, promptInstall)
+		return true, addFromInstructionFile(ctx, cmd, out, status, input, promptInstall)
 	}
 
+	return false, nil
+}
+
+// addFromZipSource handles adding an asset from a zip file, directory, or GitHub URL.
+func addFromZipSource(ctx context.Context, cmd *cobra.Command, out *outputHelper, status *components.Status, input string, opts addOptions) error {
 	// Get and validate zip file
 	zipFile, zipData, err := loadZipFile(out, status, input)
 	if err != nil {
@@ -211,7 +235,6 @@ func runAddWithOptions(cmd *cobra.Command, input string, opts addOptions) error 
 	if contentsIdentical {
 		addErr = handleIdenticalAsset(ctx, out, status, vault, name, version, assetType, opts)
 	} else {
-		// Add new or updated asset
 		addErr = addNewAsset(ctx, out, status, vault, name, assetType, version, zipFile, zipData, metadataExists, opts)
 	}
 
@@ -320,7 +343,7 @@ func configureFoundAsset(ctx context.Context, cmd *cobra.Command, out *outputHel
 // or (false, err) on error.
 func promptAddMenu(cmd *cobra.Command, ctx context.Context, out *outputHelper) (bool, error) {
 	selected, err := components.Select("How would you like to add an asset?", []components.Option{
-		{Label: "Browse community skills", Value: "browse"},
+		{Label: "Browse skills.sh", Value: "browse"},
 		{Label: "Enter path or URL", Value: "manual"},
 	})
 	if err != nil {

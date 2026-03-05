@@ -94,6 +94,16 @@ Your prompt files stay exactly as they are - `sx` just wraps them with metadata 
 - **MCP Servers** (experimental) - Model Context Protocol (MCP) servers for external integrations
 - **Plugins** - Claude Code plugin bundles with commands, skills, and more
 
+## skills.sh support
+
+sx integrates with [skills.sh](https://skills.sh), a community directory of 85k+ agent skills.
+
+```bash
+sx add anthropics/skills/frontend-design  # Add a specific skill
+sx add vercel-labs/agent-skills           # Browse skills in a repo
+sx add --browse                           # Search and browse the full directory
+```
+
 ## Distribution models
 
 Choose the right distribution model for your team:

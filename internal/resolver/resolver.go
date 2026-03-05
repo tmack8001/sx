@@ -14,6 +14,7 @@ import (
 	"github.com/sleuth-io/sx/internal/asset"
 	"github.com/sleuth-io/sx/internal/buildinfo"
 	"github.com/sleuth-io/sx/internal/git"
+	"github.com/sleuth-io/sx/internal/github"
 	"github.com/sleuth-io/sx/internal/lockfile"
 	"github.com/sleuth-io/sx/internal/requirements"
 	vaultpkg "github.com/sleuth-io/sx/internal/vault"
@@ -56,6 +57,8 @@ func (r *Resolver) Resolve(reqs []requirements.Requirement) (*lockfile.LockFile,
 			name = req.Name
 		case requirements.RequirementTypeGit:
 			name = req.GitName
+		case requirements.RequirementTypeSkillsSh:
+			name = skillsShAssetName(req)
 		case requirements.RequirementTypePath, requirements.RequirementTypeHTTP:
 			// For path/HTTP, we need to download and extract to get the name
 			// We'll handle this specially
@@ -114,6 +117,8 @@ func (r *Resolver) resolveRequirement(req requirements.Requirement) (*lockfile.A
 		return r.resolvePath(req)
 	case requirements.RequirementTypeHTTP:
 		return r.resolveHTTP(req)
+	case requirements.RequirementTypeSkillsSh:
+		return r.resolveSkillsSh(req)
 	default:
 		return nil, nil, fmt.Errorf("unknown requirement type: %s", req.Type)
 	}
@@ -284,6 +289,63 @@ func (r *Resolver) resolveHTTP(req requirements.Requirement) (*lockfile.Asset, [
 
 	// TODO: Extract metadata from zip, parse dependencies
 	return resolvedAsset, nil, nil
+}
+
+// resolveSkillsSh resolves a skills.sh:owner/repo[/skill-name] requirement to a SourceGit lock entry.
+// The GitHub repo is public so no authentication is required.
+func (r *Resolver) resolveSkillsSh(req requirements.Requirement) (*lockfile.Asset, []requirements.Requirement, error) {
+	repoURL := fmt.Sprintf("https://github.com/%s.git", req.SkillsShOwnerRepo)
+
+	// Resolve HEAD to a pinned commit SHA for reproducible installs
+	commitSHA, err := r.resolveGitRef(repoURL, "HEAD")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to resolve HEAD for %s: %w", req.SkillsShOwnerRepo, err)
+	}
+
+	// Determine subdirectory within the repo.
+	// The skill name (from SKILL.md) may differ from the actual directory name,
+	// so we resolve it via the GitHub API.
+	var subdirectory string
+	if req.SkillsShSkillName != "" {
+		parts := strings.SplitN(req.SkillsShOwnerRepo, "/", 2)
+		if len(parts) != 2 {
+			return nil, nil, fmt.Errorf("invalid owner/repo: %s", req.SkillsShOwnerRepo)
+		}
+		dir, err := github.ResolveSkillDirectory(r.ctx, parts[0], parts[1], commitSHA, req.SkillsShSkillName)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to resolve skill directory for %s: %w", req.SkillsShSkillName, err)
+		}
+		subdirectory = "skills/" + dir
+	}
+
+	name := skillsShAssetName(req)
+
+	resolvedAsset := &lockfile.Asset{
+		Name:    name,
+		Version: "0.0.0+git" + commitSHA[:7],
+		Type:    asset.TypeSkill,
+		SourceGit: &lockfile.SourceGit{
+			URL:          repoURL,
+			Ref:          commitSHA,
+			Subdirectory: subdirectory,
+		},
+	}
+
+	return resolvedAsset, nil, nil
+}
+
+// skillsShAssetName returns the lock file asset name for a skills.sh requirement.
+// Uses the skill name when specified, otherwise the repo name.
+func skillsShAssetName(req requirements.Requirement) string {
+	if req.SkillsShSkillName != "" {
+		return req.SkillsShSkillName
+	}
+	// Extract repo name from "owner/repo"
+	parts := strings.SplitN(req.SkillsShOwnerRepo, "/", 2)
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return req.SkillsShOwnerRepo
 }
 
 // resolveGitRef resolves a git ref (branch, tag, or commit) to a commit SHA
