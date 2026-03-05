@@ -367,6 +367,7 @@ func ResolveMarketplacePluginPathFromFile(knownMarketsPath, marketplaceName, plu
 
 	pluginPaths := []string{
 		filepath.Join(marketplace.InstallLocation, "plugins", pluginName),
+		filepath.Join(marketplace.InstallLocation, "external_plugins", pluginName),
 		filepath.Join(marketplace.InstallLocation, pluginName),
 	}
 
@@ -377,20 +378,25 @@ func ResolveMarketplacePluginPathFromFile(knownMarketsPath, marketplaceName, plu
 		}
 	}
 
-	pluginsDir := filepath.Join(marketplace.InstallLocation, "plugins")
-	if utils.IsDirectory(pluginsDir) {
-		entries, _ := os.ReadDir(pluginsDir)
-		var available []string
-		for _, entry := range entries {
-			if entry.IsDir() && entry.Name() != "." && entry.Name() != ".." {
-				if utils.FileExists(filepath.Join(pluginsDir, entry.Name(), ".claude-plugin", "plugin.json")) {
-					available = append(available, entry.Name())
+	searchDirs := []string{
+		filepath.Join(marketplace.InstallLocation, "plugins"),
+		filepath.Join(marketplace.InstallLocation, "external_plugins"),
+	}
+	var available []string
+	for _, dir := range searchDirs {
+		if utils.IsDirectory(dir) {
+			entries, _ := os.ReadDir(dir)
+			for _, entry := range entries {
+				if entry.IsDir() && entry.Name() != "." && entry.Name() != ".." {
+					if utils.FileExists(filepath.Join(dir, entry.Name(), ".claude-plugin", "plugin.json")) {
+						available = append(available, entry.Name())
+					}
 				}
 			}
 		}
-		if len(available) > 0 {
-			return "", fmt.Errorf("plugin %q not found in marketplace %q. Available plugins: %s", pluginName, marketplaceName, strings.Join(available, ", "))
-		}
+	}
+	if len(available) > 0 {
+		return "", fmt.Errorf("plugin %q not found in marketplace %q. Available plugins: %s", pluginName, marketplaceName, strings.Join(available, ", "))
 	}
 
 	return "", fmt.Errorf("plugin %q not found in marketplace %q", pluginName, marketplaceName)

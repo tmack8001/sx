@@ -55,6 +55,47 @@ func TestResolveMarketplacePluginPathFromFile(t *testing.T) {
 			t.Fatal("expected error for nonexistent plugin")
 		}
 	})
+
+	t.Run("found plugin in external_plugins", func(t *testing.T) {
+		extPluginDir := filepath.Join(marketplaceDir, "external_plugins", "ext-plugin", ".claude-plugin")
+		if err := os.MkdirAll(extPluginDir, 0755); err != nil {
+			t.Fatalf("failed to create external plugin dir: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(extPluginDir, "plugin.json"), []byte(`{}`), 0644); err != nil {
+			t.Fatalf("failed to write plugin.json: %v", err)
+		}
+
+		path, err := ResolveMarketplacePluginPathFromFile(knownMarketsPath, "my-market", "ext-plugin")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := filepath.Join(marketplaceDir, "external_plugins", "ext-plugin")
+		if path != expected {
+			t.Errorf("expected %q, got %q", expected, path)
+		}
+	})
+
+	t.Run("plugins dir takes precedence over external_plugins", func(t *testing.T) {
+		// Create plugin in both plugins/ and external_plugins/
+		for _, subdir := range []string{"plugins", "external_plugins"} {
+			dir := filepath.Join(marketplaceDir, subdir, "dual-plugin", ".claude-plugin")
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatalf("failed to create dir: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(`{}`), 0644); err != nil {
+				t.Fatalf("failed to write plugin.json: %v", err)
+			}
+		}
+
+		path, err := ResolveMarketplacePluginPathFromFile(knownMarketsPath, "my-market", "dual-plugin")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		expected := filepath.Join(marketplaceDir, "plugins", "dual-plugin")
+		if path != expected {
+			t.Errorf("expected plugins/ to win, got %q", path)
+		}
+	})
 }
 
 func TestResolveMarketplaceNameFromFile(t *testing.T) {
