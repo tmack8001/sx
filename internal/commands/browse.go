@@ -59,10 +59,7 @@ func browseCommunitySkills(cmd *cobra.Command) bool {
 		}
 
 		// Get current page
-		end := offset + browsePageSize
-		if end > len(current) {
-			end = len(current)
-		}
+		end := min(offset+browsePageSize, len(current))
 		page := current[offset:end]
 
 		// Build options
@@ -74,7 +71,7 @@ func browseCommunitySkills(cmd *cobra.Command) bool {
 			options = append(options, components.Option{
 				Label:       label,
 				Value:       fmt.Sprintf("%s/%s", s.Source, s.SkillID),
-				Description: fmt.Sprintf("%s installs", s.FormatInstalls()),
+				Description: s.FormatInstalls() + " installs",
 			})
 		}
 

@@ -139,17 +139,17 @@ func TestSearch(t *testing.T) {
 		query string
 		want  int
 	}{
-		{"", 4},             // empty query returns all
-		{"frontend", 1},     // matches name
-		{"react", 1},        // matches name
-		{"azure", 1},        // matches name
-		{"python", 1},       // matches name and source
-		{"anthropics", 1},   // matches source only
-		{"vercel", 1},       // matches source only
-		{"microsoft", 1},    // matches source only
-		{"nonexistent", 0},  // no matches
-		{"FRONTEND", 1},     // case insensitive
-		{"deploy", 1},       // partial match
+		{"", 4},            // empty query returns all
+		{"frontend", 1},    // matches name
+		{"react", 1},       // matches name
+		{"azure", 1},       // matches name
+		{"python", 1},      // matches name and source
+		{"anthropics", 1},  // matches source only
+		{"vercel", 1},      // matches source only
+		{"microsoft", 1},   // matches source only
+		{"nonexistent", 0}, // no matches
+		{"FRONTEND", 1},    // case insensitive
+		{"deploy", 1},      // partial match
 	}
 
 	for _, tc := range tests {

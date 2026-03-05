@@ -209,7 +209,7 @@ func resolveSkillDirectory(ctx context.Context, cmd *cobra.Command, owner, repo,
 
 	// Directory doesn't match skillId — list all directories and find the right one
 	status := components.NewStatus(cmd.OutOrStdout())
-	status.Start(fmt.Sprintf("Resolving skill directory for %s", skillName))
+	status.Start("Resolving skill directory for " + skillName)
 
 	dirs, err := listSkillsShSkills(ctx, owner, repo, branch)
 	if err != nil {

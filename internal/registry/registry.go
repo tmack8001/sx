@@ -4,10 +4,12 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,7 +27,7 @@ const (
 // Skill represents a skill from the skills.sh directory.
 type Skill struct {
 	Source   string // e.g., "anthropics/skills"
-	SkillID string // e.g., "frontend-design"
+	SkillID  string // e.g., "frontend-design"
 	Name     string // e.g., "frontend-design"
 	Installs int    // e.g., 123897
 }
@@ -43,7 +45,7 @@ func (s Skill) FormatInstalls() string {
 	if s.Installs >= 1_000 {
 		return fmt.Sprintf("%.1fK", float64(s.Installs)/1_000)
 	}
-	return fmt.Sprintf("%d", s.Installs)
+	return strconv.Itoa(s.Installs)
 }
 
 // FormatCount returns a human-readable count (e.g., "85.7K", "1.2M").
@@ -54,7 +56,7 @@ func FormatCount(n int) string {
 	if n >= 1_000 {
 		return fmt.Sprintf("%.1fK", float64(n)/1_000)
 	}
-	return fmt.Sprintf("%d", n)
+	return strconv.Itoa(n)
 }
 
 // FetchTopSkills fetches the most popular skills from skills.sh via the search API.
@@ -66,7 +68,7 @@ func FetchTopSkills(ctx context.Context, limit int) ([]Skill, error) {
 // The API requires a minimum 2-character query and supports a configurable limit.
 func SearchSkills(ctx context.Context, query string, limit int) ([]Skill, error) {
 	if len(query) < 2 {
-		return nil, fmt.Errorf("search query must be at least 2 characters")
+		return nil, errors.New("search query must be at least 2 characters")
 	}
 	if limit <= 0 {
 		limit = 20

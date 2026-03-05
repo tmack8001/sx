@@ -8,12 +8,12 @@ import (
 
 func TestParseLineSkillsSh(t *testing.T) {
 	tests := []struct {
-		name              string
-		line              string
-		wantType          RequirementType
-		wantOwnerRepo     string
-		wantSkillName     string
-		wantErr           bool
+		name          string
+		line          string
+		wantType      RequirementType
+		wantOwnerRepo string
+		wantSkillName string
+		wantErr       bool
 	}{
 		{
 			name:          "specific skill",

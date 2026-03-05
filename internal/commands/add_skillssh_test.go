@@ -165,14 +165,14 @@ func TestSkillsShDoesNotConflictWithOtherInputTypes(t *testing.T) {
 	// These inputs should NOT be detected as skills.sh references
 	// because they're handled by other code paths
 	nonSkillsShInputs := []string{
-		"plugin@marketplace",                                      // marketplace reference
+		"plugin@marketplace", // marketplace reference
 		"https://github.com/owner/repo/tree/main/skills/my-skill", // GitHub tree URL
-		"https://example.com/skill.zip",                            // HTTP URL
-		"./local/path",                                             // local path
-		"/absolute/path",                                           // absolute path
-		"~/home/path",                                              // home path
-		"my-asset-name",                                            // registry asset name
-		"git@github.com:user/repo",                                 // git SSH URL
+		"https://example.com/skill.zip",                           // HTTP URL
+		"./local/path",                                            // local path
+		"/absolute/path",                                          // absolute path
+		"~/home/path",                                             // home path
+		"my-asset-name",                                           // registry asset name
+		"git@github.com:user/repo",                                // git SSH URL
 	}
 
 	for _, input := range nonSkillsShInputs {
