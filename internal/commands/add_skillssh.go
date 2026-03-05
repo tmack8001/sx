@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/sleuth-io/sx/internal/buildinfo"
+	"github.com/sleuth-io/sx/internal/github"
 	"github.com/sleuth-io/sx/internal/ui/components"
 )
 
@@ -68,12 +69,16 @@ func addFromSkillsSh(cmd *cobra.Command, input string, opts addOptions) error {
 	}
 	status.Done("")
 
-	// If a specific skill was given, resolve the directory name and add
+	// If a specific skill was given, resolve the directory name and add.
+	// The skillId from skills.sh may differ from the directory name.
 	if skill != "" {
-		resolvedDir, err := resolveSkillDirectory(ctx, cmd, owner, repo, branch, skill)
+		status.Start("Resolving skill directory for " + skill)
+		resolvedDir, err := github.ResolveSkillDirectory(ctx, owner, repo, branch, skill)
 		if err != nil {
+			status.Fail("Could not find skill")
 			return fmt.Errorf("failed to resolve skill directory: %w", err)
 		}
+		status.Done("")
 		treeURL := skillsShToTreeURL(owner, repo, resolvedDir, branch)
 		return runAddWithFlags(cmd, treeURL, opts)
 	}
@@ -183,88 +188,6 @@ func resolveDefaultBranch(ctx context.Context, owner, repo string) (string, erro
 		return "main", nil
 	}
 	return repoInfo.DefaultBranch, nil
-}
-
-// resolveSkillDirectory resolves the actual directory name for a skill in a repo.
-// The skills.sh skillId (from SKILL.md name field) may differ from the directory name.
-// For example, skillId "vercel-react-best-practices" might live in directory "react-best-practices".
-func resolveSkillDirectory(ctx context.Context, cmd *cobra.Command, owner, repo, branch, skillName string) (string, error) {
-	// First, check if the skillId matches a directory directly
-	checkURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/skills/%s/SKILL.md?ref=%s",
-		owner, repo, skillName, branch)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", buildinfo.GetUserAgent())
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	resp.Body.Close()
-	if resp.StatusCode == http.StatusOK {
-		return skillName, nil
-	}
-
-	// Directory doesn't match skillId — list all directories and find the right one
-	status := components.NewStatus(cmd.OutOrStdout())
-	status.Start("Resolving skill directory for " + skillName)
-
-	dirs, err := listSkillsShSkills(ctx, owner, repo, branch)
-	if err != nil {
-		status.Fail("Failed to list skills")
-		return "", err
-	}
-
-	// If only one directory, use it
-	if len(dirs) == 1 {
-		status.Done("")
-		return dirs[0], nil
-	}
-
-	// Check each directory's SKILL.md for a matching name field
-	for _, dir := range dirs {
-		content, err := fetchRawFile(ctx, owner, repo, branch, fmt.Sprintf("skills/%s/SKILL.md", dir))
-		if err != nil {
-			continue
-		}
-		// Check first 500 bytes for the name field (matches Python implementation)
-		header := content
-		if len(header) > 500 {
-			header = header[:500]
-		}
-		if strings.Contains(header, "name: "+skillName) {
-			status.Done("")
-			return dir, nil
-		}
-	}
-
-	status.Fail("Could not find skill")
-	return "", fmt.Errorf("could not find skill %q in %s/%s/skills/ (directories: %v)", skillName, owner, repo, dirs)
-}
-
-// fetchRawFile fetches the raw content of a file from GitHub.
-func fetchRawFile(ctx context.Context, owner, repo, branch, path string) (string, error) {
-	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, branch, path)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", buildinfo.GetUserAgent())
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	return string(body), nil
 }
 
 // listSkillsShSkills lists the skill directories in a skills.sh repo's skills/ directory.

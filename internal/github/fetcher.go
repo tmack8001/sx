@@ -203,3 +203,114 @@ func (f *Fetcher) setHeaders(req *http.Request) {
 		req.Header.Set("Authorization", "Bearer "+f.token)
 	}
 }
+
+// ResolveSkillDirectory resolves the actual directory name for a skill in a repo.
+// The skills.sh skillId (from SKILL.md name field) may differ from the directory name.
+// For example, skillId "vercel-react-best-practices" might live in directory "react-best-practices".
+func ResolveSkillDirectory(ctx context.Context, owner, repo, ref, skillName string) (string, error) {
+	userAgent := buildinfo.GetUserAgent()
+	client := &http.Client{Timeout: 30 * time.Second}
+
+	// First, check if the skillId matches a directory directly
+	checkURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/skills/%s/SKILL.md?ref=%s",
+		owner, repo, skillName, ref)
+	checkReq, err := http.NewRequestWithContext(ctx, http.MethodGet, checkURL, nil)
+	if err != nil {
+		return "", err
+	}
+	checkReq.Header.Set("User-Agent", userAgent)
+	checkReq.Header.Set("Accept", "application/vnd.github.v3+json")
+	checkResp, err := client.Do(checkReq)
+	if err != nil {
+		return "", err
+	}
+	checkResp.Body.Close()
+	if checkResp.StatusCode == http.StatusOK {
+		return skillName, nil
+	}
+
+	// Directory doesn't match skillId — list all directories and find the right one
+	dirs, err := listSkillDirs(ctx, client, userAgent, owner, repo, ref)
+	if err != nil {
+		return "", err
+	}
+
+	// If only one directory, use it
+	if len(dirs) == 1 {
+		return dirs[0], nil
+	}
+
+	// Check each directory's SKILL.md for a matching name field
+	for _, dir := range dirs {
+		content, err := fetchRawFileContent(ctx, client, userAgent, owner, repo, ref, "skills/"+dir+"/SKILL.md")
+		if err != nil {
+			continue
+		}
+		// Check first 500 bytes for the name field (matches Python implementation)
+		if len(content) > 500 {
+			content = content[:500]
+		}
+		if bytes.Contains(content, []byte("name: "+skillName)) {
+			return dir, nil
+		}
+	}
+
+	return "", fmt.Errorf("could not find skill %q in %s/%s/skills/ (directories: %v)", skillName, owner, repo, dirs)
+}
+
+// listSkillDirs lists directories under skills/ in a GitHub repo.
+func listSkillDirs(ctx context.Context, client *http.Client, userAgent, owner, repo, ref string) ([]string, error) {
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/skills?ref=%s", owner, repo, ref)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var contents []struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&contents); err != nil {
+		return nil, err
+	}
+
+	var dirs []string
+	for _, item := range contents {
+		if item.Type == "dir" {
+			dirs = append(dirs, item.Name)
+		}
+	}
+	return dirs, nil
+}
+
+// fetchRawFileContent fetches raw file content from GitHub.
+func fetchRawFileContent(ctx context.Context, client *http.Client, userAgent, owner, repo, ref, filePath string) ([]byte, error) {
+	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, ref, filePath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}

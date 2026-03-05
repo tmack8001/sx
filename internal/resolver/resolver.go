@@ -14,6 +14,7 @@ import (
 	"github.com/sleuth-io/sx/internal/asset"
 	"github.com/sleuth-io/sx/internal/buildinfo"
 	"github.com/sleuth-io/sx/internal/git"
+	"github.com/sleuth-io/sx/internal/github"
 	"github.com/sleuth-io/sx/internal/lockfile"
 	"github.com/sleuth-io/sx/internal/requirements"
 	vaultpkg "github.com/sleuth-io/sx/internal/vault"
@@ -302,10 +303,19 @@ func (r *Resolver) resolveSkillsSh(req requirements.Requirement) (*lockfile.Asse
 	}
 
 	// Determine subdirectory within the repo.
-	// skills.sh repositories store each skill under skills/{skill-name}/
+	// The skill name (from SKILL.md) may differ from the actual directory name,
+	// so we resolve it via the GitHub API.
 	var subdirectory string
 	if req.SkillsShSkillName != "" {
-		subdirectory = "skills/" + req.SkillsShSkillName
+		parts := strings.SplitN(req.SkillsShOwnerRepo, "/", 2)
+		if len(parts) != 2 {
+			return nil, nil, fmt.Errorf("invalid owner/repo: %s", req.SkillsShOwnerRepo)
+		}
+		dir, err := github.ResolveSkillDirectory(r.ctx, parts[0], parts[1], commitSHA, req.SkillsShSkillName)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to resolve skill directory for %s: %w", req.SkillsShSkillName, err)
+		}
+		subdirectory = "skills/" + dir
 	}
 
 	name := skillsShAssetName(req)

@@ -143,39 +143,58 @@ func runAddWithOptions(cmd *cobra.Command, input string, opts addOptions) error 
 		}
 	}
 
-	// Check if input is a skills.sh reference (owner/repo or owner/repo/skill or skills.sh:...)
-	if input != "" && (strings.HasPrefix(input, "skills.sh:") || isSkillsShReference(input)) {
-		return addFromSkillsSh(cmd, input, opts)
-	}
-
-	// Check if input is plugin@marketplace syntax
-	if input != "" && IsMarketplaceReference(input) {
-		promptInstall := !opts.NoInstall && !opts.Yes
-		return addFromMarketplace(ctx, cmd, out, status, input, promptInstall, opts)
-	}
-
-	// Check if input is an existing asset name (not a file, directory, or URL)
-	if input != "" && !isURL(input) && !github.IsTreeURL(input) {
-		if _, err := os.Stat(input); os.IsNotExist(err) {
-			// Not a file/directory - check if it's an existing asset
-			return configureExistingAsset(ctx, cmd, out, status, input, opts)
+	// Try specialized handlers for specific input types
+	if input != "" {
+		if handled, err := routeSpecializedInput(ctx, cmd, out, status, input, opts); handled || err != nil {
+			return err
 		}
 	}
 
-	// Check if input is a remote MCP URL (not a zip download, not GitHub tree)
-	if input != "" && isRemoteMCPURL(input) {
-		return addRemoteMCP(ctx, cmd, out, status, input, opts)
+	// Fall through to zip-based asset add
+	return addFromZipSource(ctx, cmd, out, status, input, opts)
+}
+
+// routeSpecializedInput checks if input matches a specialized handler (skills.sh, marketplace,
+// existing asset, remote MCP, instruction file) and routes to it.
+// Returns (true, err) if handled, (false, nil) if the caller should fall through to zip handling.
+func routeSpecializedInput(ctx context.Context, cmd *cobra.Command, out *outputHelper, status *components.Status, input string, opts addOptions) (bool, error) {
+	// skills.sh reference (owner/repo or owner/repo/skill or skills.sh:...)
+	if strings.HasPrefix(input, "skills.sh:") || isSkillsShReference(input) {
+		return true, addFromSkillsSh(cmd, input, opts)
 	}
 
-	// Check if input is an instruction file (CLAUDE.md, AGENTS.md) that can be parsed for sections
-	if input != "" && isInstructionFile(input) {
+	// plugin@marketplace syntax
+	if IsMarketplaceReference(input) {
+		promptInstall := !opts.NoInstall && !opts.Yes
+		return true, addFromMarketplace(ctx, cmd, out, status, input, promptInstall, opts)
+	}
+
+	// Existing asset name (not a file, directory, or URL)
+	if !isURL(input) && !github.IsTreeURL(input) {
+		if _, err := os.Stat(input); os.IsNotExist(err) {
+			return true, configureExistingAsset(ctx, cmd, out, status, input, opts)
+		}
+	}
+
+	// Remote MCP URL
+	if isRemoteMCPURL(input) {
+		return true, addRemoteMCP(ctx, cmd, out, status, input, opts)
+	}
+
+	// Instruction file (CLAUDE.md, AGENTS.md)
+	if isInstructionFile(input) {
 		if opts.isNonInteractive() {
-			return errors.New("instruction files require interactive mode (multiple sections may need selection)")
+			return true, errors.New("instruction files require interactive mode (multiple sections may need selection)")
 		}
 		promptInstall := !opts.NoInstall
-		return addFromInstructionFile(ctx, cmd, out, status, input, promptInstall)
+		return true, addFromInstructionFile(ctx, cmd, out, status, input, promptInstall)
 	}
 
+	return false, nil
+}
+
+// addFromZipSource handles adding an asset from a zip file, directory, or GitHub URL.
+func addFromZipSource(ctx context.Context, cmd *cobra.Command, out *outputHelper, status *components.Status, input string, opts addOptions) error {
 	// Get and validate zip file
 	zipFile, zipData, err := loadZipFile(out, status, input)
 	if err != nil {
@@ -216,7 +235,6 @@ func runAddWithOptions(cmd *cobra.Command, input string, opts addOptions) error 
 	if contentsIdentical {
 		addErr = handleIdenticalAsset(ctx, out, status, vault, name, version, assetType, opts)
 	} else {
-		// Add new or updated asset
 		addErr = addNewAsset(ctx, out, status, vault, name, assetType, version, zipFile, zipData, metadataExists, opts)
 	}
 
