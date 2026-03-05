@@ -3,14 +3,23 @@ package registry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/sleuth-io/sx/internal/buildinfo"
+)
+
+const (
+	skillsShAPIBase = "https://skills.sh"
+	// browseQuery is a short query that broadly matches most skills, returning
+	// top results sorted by installs. This mirrors the approach used by the
+	// skills.sh application itself (see catalog_providers.py).
+	browseQuery = "sk"
 )
 
 // Skill represents a skill from the skills.sh directory.
@@ -37,62 +46,97 @@ func (s Skill) FormatInstalls() string {
 	return fmt.Sprintf("%d", s.Installs)
 }
 
-var skillPattern = regexp.MustCompile(
-	`\{"source":"([^"]+)","skillId":"([^"]+)","name":"([^"]+)","installs":(\d+)\}`,
-)
+// FormatCount returns a human-readable count (e.g., "85.7K", "1.2M").
+func FormatCount(n int) string {
+	if n >= 1_000_000 {
+		return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
+	}
+	if n >= 1_000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1_000)
+	}
+	return fmt.Sprintf("%d", n)
+}
 
-// FetchSkills fetches the full skills directory from skills.sh.
-func FetchSkills(ctx context.Context) ([]Skill, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://skills.sh", nil)
+// FetchTopSkills fetches the most popular skills from skills.sh via the search API.
+func FetchTopSkills(ctx context.Context, limit int) ([]Skill, error) {
+	return SearchSkills(ctx, browseQuery, limit)
+}
+
+// SearchSkills searches the skills.sh directory via the API.
+// The API requires a minimum 2-character query and supports a configurable limit.
+func SearchSkills(ctx context.Context, query string, limit int) ([]Skill, error) {
+	if len(query) < 2 {
+		return nil, fmt.Errorf("search query must be at least 2 characters")
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	apiURL := fmt.Sprintf("%s/api/search?q=%s&limit=%d",
+		skillsShAPIBase, url.QueryEscape(query), limit)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", buildinfo.GetUserAgent())
-	// Request RSC payload for clean JSON data
-	req.Header.Set("RSC", "1")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch skills.sh: %w", err)
+		return nil, fmt.Errorf("failed to search skills.sh: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("skills.sh returned HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("skills.sh search returned HTTP %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
+		return nil, fmt.Errorf("failed to read search response: %w", err)
 	}
 
-	return ParseSkillsResponse(string(body))
+	return ParseSearchResponse(body)
 }
 
-// ParseSkillsResponse parses skills from a skills.sh RSC response body.
-func ParseSkillsResponse(body string) ([]Skill, error) {
-	matches := skillPattern.FindAllStringSubmatch(body, -1)
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("no skills found in skills.sh response")
+// searchResponse is the JSON structure returned by the skills.sh search API.
+type searchResponse struct {
+	Skills []searchSkill `json:"skills"`
+	Error  string        `json:"error,omitempty"`
+}
+
+type searchSkill struct {
+	SkillID  string `json:"skillId"`
+	Name     string `json:"name"`
+	Source   string `json:"source"`
+	Installs int    `json:"installs"`
+}
+
+// ParseSearchResponse parses the JSON response from the skills.sh search API.
+func ParseSearchResponse(body []byte) ([]Skill, error) {
+	var resp searchResponse
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return nil, fmt.Errorf("failed to parse search response: %w", err)
+	}
+	if resp.Error != "" {
+		return nil, fmt.Errorf("skills.sh search error: %s", resp.Error)
 	}
 
-	skills := make([]Skill, 0, len(matches))
-	for _, m := range matches {
-		installs := 0
-		fmt.Sscanf(m[4], "%d", &installs)
+	skills := make([]Skill, 0, len(resp.Skills))
+	for _, s := range resp.Skills {
 		skills = append(skills, Skill{
-			Source:   m[1],
-			SkillID:  m[2],
-			Name:     m[3],
-			Installs: installs,
+			Source:   s.Source,
+			SkillID:  s.SkillID,
+			Name:     s.Name,
+			Installs: s.Installs,
 		})
 	}
-
 	return skills, nil
 }
 
-// Search filters skills by a query string, matching against name and source.
+// Search filters skills locally by a query string, matching against name and source.
+// Prefer SearchSkills for server-side search across the full directory.
 func Search(skills []Skill, query string) []Skill {
 	if query == "" {
 		return skills

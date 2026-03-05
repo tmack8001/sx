@@ -14,6 +14,10 @@ import (
 
 const browsePageSize = 5
 
+const browseTopLimit = 50
+
+const searchResultLimit = 20
+
 // browseCommunitySkills presents the skills.sh browser with search and pagination.
 // Returns true if any skills were added.
 func browseCommunitySkills(cmd *cobra.Command) bool {
@@ -25,63 +29,46 @@ func browseCommunitySkills(cmd *cobra.Command) bool {
 	status := components.NewStatus(cmd.OutOrStdout())
 	status.Start("Loading skills from skills.sh")
 
-	allSkills, err := registry.FetchSkills(ctx)
+	topSkills, err := registry.FetchTopSkills(ctx, browseTopLimit)
 	if err != nil {
 		status.Fail("Failed to load skills")
-		styledOut.Error(fmt.Sprintf("Failed to load skills from skills.sh: %v", err))
+		styledOut.Error(fmt.Sprintf("Could not reach skills.sh: %v", err))
 		return false
 	}
-	status.Done(fmt.Sprintf("Loaded %d skills", len(allSkills)))
+	status.Done("")
 
 	var addedAny bool
 	query := ""
 	offset := 0
+	// current holds the active skill list: top skills initially, search results after a query
+	current := topSkills
 
 	for {
-		// Filter by current search query
-		filtered := registry.Search(allSkills, query)
-
-		if len(filtered) == 0 {
+		if len(current) == 0 {
 			styledOut.Newline()
 			if query != "" {
-				styledOut.Info(fmt.Sprintf("No skills matching \"%s\".", query))
+				styledOut.Info(fmt.Sprintf("No skills found for \"%s\".", query))
 			} else {
 				styledOut.Info("No skills available.")
 			}
 		}
 
 		// Clamp offset
-		if offset >= len(filtered) {
+		if offset >= len(current) {
 			offset = 0
 		}
 
 		// Get current page
 		end := offset + browsePageSize
-		if end > len(filtered) {
-			end = len(filtered)
+		if end > len(current) {
+			end = len(current)
 		}
-		page := filtered[offset:end]
+		page := current[offset:end]
 
 		// Build options
 		var options []components.Option
 
-		// Search option always first
-		searchLabel := "Search skills..."
-		if query != "" {
-			searchLabel = fmt.Sprintf("Search skills... (current: \"%s\")", query)
-		}
-		options = append(options, components.Option{
-			Label: searchLabel,
-			Value: "search",
-		})
-
-		// Done option
-		options = append(options, components.Option{
-			Label: "Done",
-			Value: "done",
-		})
-
-		// Skill options
+		// Skill options first — the primary content
 		for _, s := range page {
 			label := fmt.Sprintf("%s (%s)", s.Name, s.Source)
 			options = append(options, components.Option{
@@ -92,26 +79,57 @@ func browseCommunitySkills(cmd *cobra.Command) bool {
 		}
 
 		// Show more option if there are more results
-		if end < len(filtered) {
-			remaining := len(filtered) - end
+		if end < len(current) {
+			remaining := len(current) - end
 			options = append(options, components.Option{
-				Label: fmt.Sprintf("Show more (%d remaining)", remaining),
-				Value: "more",
+				Label:       fmt.Sprintf("Show more (%d remaining)", remaining),
+				Value:       "more",
+				Description: "Load next page",
 			})
 		}
 
-		styledOut.Newline()
-
-		// Show result count context
+		// Search option
+		searchLabel := "Search skills.sh"
+		searchDesc := "Search across all skills"
 		if query != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "Showing %d-%d of %d results for \"%s\"\n",
-				offset+1, end, len(filtered), query)
-		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "Showing %d-%d of %d skills\n",
-				offset+1, end, len(filtered))
+			searchLabel = fmt.Sprintf("New search (current: \"%s\")", query)
+			searchDesc = "Search again or clear"
+		}
+		options = append(options, components.Option{
+			Label:       searchLabel,
+			Value:       "search",
+			Description: searchDesc,
+		})
+
+		// Clear search option — only show when a search is active
+		if query != "" {
+			options = append(options, components.Option{
+				Label:       "Back to top skills",
+				Value:       "clear",
+				Description: "Clear search",
+			})
 		}
 
-		selected, err := components.SelectWithDefault("Browse skills.sh:", options, 0)
+		// Done option last
+		options = append(options, components.Option{
+			Label:       "Done",
+			Value:       "done",
+			Description: "Exit browser",
+		})
+
+		styledOut.Newline()
+
+		// Build the select title with context
+		var title string
+		if query != "" {
+			title = fmt.Sprintf("Results for \"%s\" (%d-%d of %d):",
+				query, offset+1, end, len(current))
+		} else {
+			title = fmt.Sprintf("Popular skills (%d-%d of %d):",
+				offset+1, end, len(current))
+		}
+
+		selected, err := components.SelectWithDefault(title, options, 0)
 		if err != nil {
 			break
 		}
@@ -119,14 +137,41 @@ func browseCommunitySkills(cmd *cobra.Command) bool {
 		switch selected.Value {
 		case "done":
 			goto done
+		case "clear":
+			query = ""
+			offset = 0
+			current = topSkills
 		case "search":
 			styledOut.Newline()
 			newQuery, err := components.InputWithPlaceholder("Search:", "e.g. react, testing, python...")
 			if err != nil {
 				goto done
 			}
-			query = newQuery
 			offset = 0
+			if newQuery == "" {
+				query = ""
+				current = topSkills
+			} else {
+				query = newQuery
+				if len(query) < 2 {
+					// API requires min 2 chars; fall back to local filtering
+					current = registry.Search(topSkills, query)
+				} else {
+					searchCtx, searchCancel := context.WithTimeout(context.Background(), 15*time.Second)
+					searchStatus := components.NewStatus(cmd.OutOrStdout())
+					searchStatus.Start(fmt.Sprintf("Searching for \"%s\"", query))
+					results, searchErr := registry.SearchSkills(searchCtx, query, searchResultLimit)
+					searchCancel()
+					if searchErr != nil {
+						searchStatus.Fail(fmt.Sprintf("Search failed: %v", searchErr))
+						current = topSkills
+						query = ""
+					} else {
+						searchStatus.Done(fmt.Sprintf("Found %d results", len(results)))
+						current = results
+					}
+				}
+			}
 		case "more":
 			offset = end
 		default:

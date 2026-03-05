@@ -48,63 +48,82 @@ func TestSkillTreeURL(t *testing.T) {
 	}
 }
 
-func TestParseSkillsResponse(t *testing.T) {
-	// Simulates the RSC payload format from skills.sh
-	body := `1:"$Sreact.fragment"
-14:["$","$L1c",null,{"initialSkills":[{"source":"vercel-labs/skills","skillId":"find-skills","name":"find-skills","installs":417896},{"source":"anthropics/skills","skillId":"frontend-design","name":"frontend-design","installs":123897},{"source":"microsoft/copilot","skillId":"azure-deploy","name":"azure-deploy","installs":110422}]}]`
-
-	skills, err := ParseSkillsResponse(body)
-	if err != nil {
-		t.Fatalf("ParseSkillsResponse() error: %v", err)
+func TestFormatCount(t *testing.T) {
+	tests := []struct {
+		n    int
+		want string
+	}{
+		{500, "500"},
+		{1000, "1.0K"},
+		{85747, "85.7K"},
+		{1000000, "1.0M"},
 	}
-
-	if len(skills) != 3 {
-		t.Fatalf("expected 3 skills, got %d", len(skills))
-	}
-
-	// Verify first skill
-	if skills[0].Source != "vercel-labs/skills" {
-		t.Errorf("skills[0].Source = %q, want %q", skills[0].Source, "vercel-labs/skills")
-	}
-	if skills[0].SkillID != "find-skills" {
-		t.Errorf("skills[0].SkillID = %q, want %q", skills[0].SkillID, "find-skills")
-	}
-	if skills[0].Name != "find-skills" {
-		t.Errorf("skills[0].Name = %q, want %q", skills[0].Name, "find-skills")
-	}
-	if skills[0].Installs != 417896 {
-		t.Errorf("skills[0].Installs = %d, want %d", skills[0].Installs, 417896)
-	}
-
-	// Verify ordering preserved
-	if skills[1].SkillID != "frontend-design" {
-		t.Errorf("skills[1].SkillID = %q, want %q", skills[1].SkillID, "frontend-design")
-	}
-	if skills[2].SkillID != "azure-deploy" {
-		t.Errorf("skills[2].SkillID = %q, want %q", skills[2].SkillID, "azure-deploy")
+	for _, tc := range tests {
+		got := FormatCount(tc.n)
+		if got != tc.want {
+			t.Errorf("FormatCount(%d) = %q, want %q", tc.n, got, tc.want)
+		}
 	}
 }
 
-func TestParseSkillsResponseEmpty(t *testing.T) {
-	_, err := ParseSkillsResponse("no skills data here")
+func TestParseSearchResponse(t *testing.T) {
+	body := []byte(`{
+		"query": "python",
+		"searchType": "fuzzy",
+		"skills": [
+			{"id": "wshobson/agents/python-perf", "skillId": "python-perf", "name": "python-perf", "installs": 7485, "source": "wshobson/agents"},
+			{"id": "org/repo/python-test", "skillId": "python-test", "name": "python-test", "installs": 6123, "source": "org/repo"}
+		],
+		"count": 2,
+		"duration_ms": 24
+	}`)
+
+	skills, err := ParseSearchResponse(body)
+	if err != nil {
+		t.Fatalf("ParseSearchResponse() error: %v", err)
+	}
+
+	if len(skills) != 2 {
+		t.Fatalf("expected 2 skills, got %d", len(skills))
+	}
+
+	if skills[0].Name != "python-perf" {
+		t.Errorf("skills[0].Name = %q, want %q", skills[0].Name, "python-perf")
+	}
+	if skills[0].Source != "wshobson/agents" {
+		t.Errorf("skills[0].Source = %q, want %q", skills[0].Source, "wshobson/agents")
+	}
+	if skills[0].Installs != 7485 {
+		t.Errorf("skills[0].Installs = %d, want 7485", skills[0].Installs)
+	}
+	if skills[1].SkillID != "python-test" {
+		t.Errorf("skills[1].SkillID = %q, want %q", skills[1].SkillID, "python-test")
+	}
+}
+
+func TestParseSearchResponseError(t *testing.T) {
+	body := []byte(`{"error": "Query must be at least 2 characters"}`)
+	_, err := ParseSearchResponse(body)
 	if err == nil {
-		t.Error("expected error for empty response, got nil")
+		t.Error("expected error for API error response, got nil")
 	}
 }
 
-func TestParseSkillsResponseEscaped(t *testing.T) {
-	// The HTML page version has escaped JSON (double backslash quotes)
-	// Our RSC endpoint returns clean JSON, but verify the regex handles it
-	body := `{"source":"org/repo","skillId":"my-skill","name":"my-skill","installs":42}`
-	skills, err := ParseSkillsResponse(body)
+func TestParseSearchResponseEmpty(t *testing.T) {
+	body := []byte(`{"query": "zzzzz", "searchType": "fuzzy", "skills": [], "count": 0}`)
+	skills, err := ParseSearchResponse(body)
 	if err != nil {
-		t.Fatalf("ParseSkillsResponse() error: %v", err)
+		t.Fatalf("ParseSearchResponse() error: %v", err)
 	}
-	if len(skills) != 1 {
-		t.Fatalf("expected 1 skill, got %d", len(skills))
+	if len(skills) != 0 {
+		t.Errorf("expected 0 skills, got %d", len(skills))
 	}
-	if skills[0].Installs != 42 {
-		t.Errorf("Installs = %d, want 42", skills[0].Installs)
+}
+
+func TestParseSearchResponseInvalidJSON(t *testing.T) {
+	_, err := ParseSearchResponse([]byte("not json"))
+	if err == nil {
+		t.Error("expected error for invalid JSON, got nil")
 	}
 }
 

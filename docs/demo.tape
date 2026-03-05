@@ -47,10 +47,8 @@ Enter
 Sleep 1500ms
 Type "y"
 
-# Featured skills menu - navigate to test-driven-development
+# Browse skills.sh - navigate to find-skills (vercel-labs/skills)
 Sleep 2s
-Down
-Sleep 1s
 Enter
 
 # Download skill from registry, "Detected asset" confirmation - accept
@@ -62,7 +60,21 @@ Sleep 1s
 Enter
 
 # "Successfully added" - back at skills menu, select "Done"
-Sleep 2s
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 200ms
+Down
+Sleep 1s
 Enter
 
 # "Run install now?" default [Yes] - accept
