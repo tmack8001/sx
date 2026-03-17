@@ -797,6 +797,14 @@ func (g *GitVault) RemoveAsset(ctx context.Context, assetName, version string, d
 		return fmt.Errorf("failed to stage changes: %w", err)
 	}
 
+	hasChanges, err := g.gitClient.HasStagedChanges(ctx, g.repoPath)
+	if err != nil {
+		return err
+	}
+	if !hasChanges {
+		return nil
+	}
+
 	action := "Remove"
 	if delete {
 		action = "Delete"

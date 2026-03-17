@@ -169,8 +169,16 @@ func RemoveAsset(lockFilePath string, name, version string) error {
 	// Filter out the asset
 	var newAssets []Asset
 	for _, ast := range lockFile.Assets {
-		if ast.Name != name || ast.Version != version {
-			newAssets = append(newAssets, ast)
+		if version == "" {
+			// Remove all versions of this asset
+			if ast.Name != name {
+				newAssets = append(newAssets, ast)
+			}
+		} else {
+			// Remove specific version
+			if ast.Name != name || ast.Version != version {
+				newAssets = append(newAssets, ast)
+			}
 		}
 	}
 

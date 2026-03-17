@@ -36,6 +36,19 @@ type SleuthVault struct {
 	gitHandler      *GitSourceHandler
 }
 
+// refreshLockFileCache fetches a fresh lock file from the server and updates the local cache.
+// This ensures subsequent operations see the latest state after a mutation.
+func (s *SleuthVault) refreshLockFileCache() {
+	data, etag, _, err := s.GetLockFile(context.Background(), "")
+	if err != nil {
+		return
+	}
+	if etag != "" {
+		_ = cache.SaveETag(s.serverURL, etag)
+	}
+	_ = cache.SaveLockFile(s.serverURL, data)
+}
+
 // NewSleuthVault creates a new Sleuth repository
 func NewSleuthVault(serverURL, authToken string) *SleuthVault {
 	gitClient := git.NewClient()
@@ -423,6 +436,7 @@ func (s *SleuthVault) RemoveAsset(ctx context.Context, assetName, version string
 		return errors.New("failed to remove asset installations")
 	}
 
+	s.refreshLockFileCache()
 	return nil
 }
 
@@ -477,6 +491,7 @@ func (s *SleuthVault) RenameAsset(ctx context.Context, oldName, newName string) 
 		return errors.New("failed to rename asset")
 	}
 
+	s.refreshLockFileCache()
 	return nil
 }
 
@@ -625,44 +640,48 @@ func (s *SleuthVault) listAssetsByType(ctx context.Context, opts ListAssetsOptio
 
 // GetAssetDetails retrieves detailed information about a specific asset using GraphQL
 func (s *SleuthVault) GetAssetDetails(ctx context.Context, name string) (*AssetDetails, error) {
-	// Build GraphQL query matching the actual schema
-	query := `query VaultAsset($name: String!) {
+	// Search for the asset by name using the assets connection
+	query := `query VaultAsset($search: String!) {
 		vault {
-			asset(name: $name) {
-				name
-				type
-				description
-				createdAt
-				updatedAt
-				versions {
-					version
+			assets(search: $search, first: 10) {
+				nodes {
+					name
+					type
+					description
 					createdAt
-					filesCount
+					updatedAt
+					versions {
+						version
+						createdAt
+						filesCount
+					}
 				}
 			}
 		}
 	}`
 
 	variables := map[string]any{
-		"name": name,
+		"search": name,
 	}
 
 	// Make GraphQL request
 	var gqlResp struct {
 		Data struct {
 			Vault struct {
-				Asset *struct {
-					Name        string    `json:"name"`
-					Type        string    `json:"type"`
-					Description string    `json:"description"`
-					CreatedAt   time.Time `json:"createdAt"`
-					UpdatedAt   time.Time `json:"updatedAt"`
-					Versions    []struct {
-						Version    string    `json:"version"`
-						CreatedAt  time.Time `json:"createdAt"`
-						FilesCount int       `json:"filesCount"`
-					} `json:"versions"`
-				} `json:"asset"`
+				Assets struct {
+					Nodes []struct {
+						Name        string    `json:"name"`
+						Type        string    `json:"type"`
+						Description string    `json:"description"`
+						CreatedAt   time.Time `json:"createdAt"`
+						UpdatedAt   time.Time `json:"updatedAt"`
+						Versions    []struct {
+							Version    string    `json:"version"`
+							CreatedAt  time.Time `json:"createdAt"`
+							FilesCount int       `json:"filesCount"`
+						} `json:"versions"`
+					} `json:"nodes"`
+				} `json:"assets"`
 			} `json:"vault"`
 		} `json:"data"`
 		Errors []struct {
@@ -678,11 +697,29 @@ func (s *SleuthVault) GetAssetDetails(ctx context.Context, name string) (*AssetD
 		return nil, fmt.Errorf("GraphQL error: %s", gqlResp.Errors[0].Message)
 	}
 
-	if gqlResp.Data.Vault.Asset == nil {
-		return nil, fmt.Errorf("asset '%s' not found", name)
+	// Find exact match by name
+	var assetData *struct {
+		Name        string    `json:"name"`
+		Type        string    `json:"type"`
+		Description string    `json:"description"`
+		CreatedAt   time.Time `json:"createdAt"`
+		UpdatedAt   time.Time `json:"updatedAt"`
+		Versions    []struct {
+			Version    string    `json:"version"`
+			CreatedAt  time.Time `json:"createdAt"`
+			FilesCount int       `json:"filesCount"`
+		} `json:"versions"`
+	}
+	for i, node := range gqlResp.Data.Vault.Assets.Nodes {
+		if node.Name == name {
+			assetData = &gqlResp.Data.Vault.Assets.Nodes[i]
+			break
+		}
 	}
 
-	assetData := gqlResp.Data.Vault.Asset
+	if assetData == nil {
+		return nil, fmt.Errorf("asset '%s' not found", name)
+	}
 
 	// Convert to result struct
 	details := &AssetDetails{

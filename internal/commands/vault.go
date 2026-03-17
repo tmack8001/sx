@@ -549,7 +549,7 @@ func runVaultRename(cmd *cobra.Command, oldName, newName string, yes bool) error
 		return fmt.Errorf("asset '%s' not found in vault", oldName)
 	}
 
-	// Validate new name does NOT exist
+	// Validate new name does NOT exist (best-effort; server enforces atomicity for Sleuth vaults)
 	if _, err := vault.GetAssetDetails(ctx, newName); err == nil {
 		status.Fail("Name conflict")
 		return fmt.Errorf("asset '%s' already exists in vault", newName)
