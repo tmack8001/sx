@@ -1,0 +1,162 @@
+package handlers
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/sleuth-io/sx/internal/asset"
+	"github.com/sleuth-io/sx/internal/handlers/dirasset"
+	"github.com/sleuth-io/sx/internal/metadata"
+	"github.com/sleuth-io/sx/internal/utils"
+)
+
+var mcpOps = dirasset.NewOperations(DirMCPServers, &asset.TypeMCP)
+
+// MCPHandler handles MCP asset installation for Kiro (both packaged and config-only)
+type MCPHandler struct {
+	metadata *metadata.Metadata
+}
+
+// NewMCPHandler creates a new MCP handler
+func NewMCPHandler(meta *metadata.Metadata) *MCPHandler {
+	return &MCPHandler{metadata: meta}
+}
+
+// Install installs an MCP asset to Kiro by updating mcp.json.
+// For packaged assets, extracts files first. For config-only, registers as-is.
+func (h *MCPHandler) Install(ctx context.Context, zipData []byte, targetBase string) error {
+	mcpConfigPath := filepath.Join(targetBase, DirSettings, "mcp.json")
+
+	// Read existing mcp.json
+	config, err := ReadMCPConfig(mcpConfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to read mcp.json: %w", err)
+	}
+
+	hasContent, err := utils.HasContentFiles(zipData)
+	if err != nil {
+		return fmt.Errorf("failed to inspect zip contents: %w", err)
+	}
+
+	var entry map[string]any
+	if hasContent {
+		// Packaged mode: extract MCP server files
+		serverDir := filepath.Join(targetBase, DirMCPServers, h.metadata.Asset.Name)
+		if err := utils.ExtractZip(zipData, serverDir); err != nil {
+			return fmt.Errorf("failed to extract MCP server: %w", err)
+		}
+		entry = h.generatePackagedMCPEntry(serverDir)
+	} else {
+		// Config-only mode: no extraction needed
+		entry = h.generateConfigOnlyMCPEntry()
+	}
+
+	// Add to config
+	if config.MCPServers == nil {
+		config.MCPServers = make(map[string]any)
+	}
+	config.MCPServers[h.metadata.Asset.Name] = entry
+
+	// Write updated mcp.json
+	if err := WriteMCPConfig(mcpConfigPath, config); err != nil {
+		return fmt.Errorf("failed to write mcp.json: %w", err)
+	}
+
+	return nil
+}
+
+// Remove removes an MCP entry from Kiro
+func (h *MCPHandler) Remove(ctx context.Context, targetBase string) error {
+	mcpConfigPath := filepath.Join(targetBase, DirSettings, "mcp.json")
+
+	// Read existing mcp.json
+	config, err := ReadMCPConfig(mcpConfigPath)
+	if err != nil {
+		return fmt.Errorf("failed to read mcp.json: %w", err)
+	}
+
+	// Remove entry
+	delete(config.MCPServers, h.metadata.Asset.Name)
+
+	// Write updated mcp.json
+	if err := WriteMCPConfig(mcpConfigPath, config); err != nil {
+		return fmt.Errorf("failed to write mcp.json: %w", err)
+	}
+
+	// Remove server directory if it exists (packaged mode)
+	serverDir := filepath.Join(targetBase, DirMCPServers, h.metadata.Asset.Name)
+	os.RemoveAll(serverDir) // Ignore errors if doesn't exist
+
+	return nil
+}
+
+func (h *MCPHandler) generatePackagedMCPEntry(serverDir string) map[string]any {
+	mcpConfig := h.metadata.MCP
+
+	command, args := utils.ResolveCommandAndArgs(mcpConfig.Command, mcpConfig.Args, serverDir)
+
+	entry := map[string]any{
+		"command": command,
+		"args":    args,
+	}
+
+	// Add env if present
+	if len(mcpConfig.Env) > 0 {
+		entry["env"] = mcpConfig.Env
+	}
+
+	return entry
+}
+
+func (h *MCPHandler) generateConfigOnlyMCPEntry() map[string]any {
+	mcpConfig := h.metadata.MCP
+
+	if mcpConfig.IsRemote() {
+		entry := map[string]any{
+			"url": mcpConfig.URL,
+		}
+		if len(mcpConfig.Env) > 0 {
+			entry["env"] = mcpConfig.Env
+		}
+		return entry
+	}
+
+	// For config-only MCPs, commands are external (npx, docker, etc.)
+	// No path conversion needed
+	entry := map[string]any{
+		"command": mcpConfig.Command,
+		"args":    utils.StringsToAny(mcpConfig.Args),
+	}
+
+	// Add env if present
+	if len(mcpConfig.Env) > 0 {
+		entry["env"] = mcpConfig.Env
+	}
+
+	return entry
+}
+
+// VerifyInstalled checks if the MCP server is properly installed.
+// For packaged assets, checks the install directory. For config-only, checks mcp.json.
+func (h *MCPHandler) VerifyInstalled(targetBase string) (bool, string) {
+	// Check if install directory exists (packaged mode)
+	installDir := filepath.Join(targetBase, DirMCPServers, h.metadata.Asset.Name)
+	if utils.IsDirectory(installDir) {
+		return mcpOps.VerifyInstalled(targetBase, h.metadata.Asset.Name, h.metadata.Asset.Version)
+	}
+
+	// Config-only mode: check mcp.json for server entry
+	mcpConfigPath := filepath.Join(targetBase, DirSettings, "mcp.json")
+	config, err := ReadMCPConfig(mcpConfigPath)
+	if err != nil {
+		return false, "failed to read mcp.json: " + err.Error()
+	}
+
+	if _, exists := config.MCPServers[h.metadata.Asset.Name]; !exists {
+		return false, "MCP server not registered"
+	}
+
+	return true, "installed"
+}
