@@ -33,7 +33,7 @@ Your best developers have figured out how to make AI assistants incredibly produ
 - **Instant onboarding** - New devs inherit the team's AI playbook on day one
 - **Central updates** - Change once in your vault, everyone gets the update
 - **Scoped installation** - Right assets for each repo, no context bloat
-- **Works with any AI client** - Claude Code, Cursor, GitHub Copilot, Gemini, and more
+- **Works with any AI client** - Claude Code, Cursor, GitHub Copilot, Gemini, Kiro, and more
 
 ## Quickstart
 
@@ -154,6 +154,7 @@ sx uses a lock file (like package-lock.json) for deterministic installations acr
 | Gemini (CLI/VS Code)    | ✅ Experimental | Skills, rules, commands, MCP servers, hooks               |
 | Gemini (JetBrains)      | ✅ Experimental | Rules, MCP servers only (no commands/hooks)               |
 | Gemini (Android Studio) | ✅ Experimental | Rules, MCP-remote only (HTTP, no stdio)                   |
+| Kiro                    | ✅ Experimental | Skills, rules, commands, MCP servers                      |
 
 
 ## Roadmap
@@ -164,6 +165,7 @@ sx uses a lock file (like package-lock.json) for deterministic installations acr
 - ✅ GitHub Copilot support (experimental)
 - ✅ Gemini support (experimental)
 - ✅ Codex support (experimental)
+- ✅ Kiro support (experimental)
 - **Skill discovery** - Use Skills.new to discover relevant skills from your code and architecture
 - **Analytics** - Track skill usage and impact
 
@@ -186,6 +188,7 @@ See LICENSE file for details.
 - [MCP Spec](docs/mcp-spec.md) - MCP server and query tool
 - [Scoping](docs/scoping.md) - Controlling where assets are installed
 - [Profiles](docs/profiles.md) - Multiple configuration profiles
+- [Clients](docs/clients.md) - Client support model and IDE vs CLI limitations
 
 
 ### Prerequisites

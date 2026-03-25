@@ -154,11 +154,12 @@ const (
 	ClientIDGitHubCopilot = "github-copilot"
 	ClientIDCodex         = "codex"
 	ClientIDOpenClaw      = "openclaw"
+	ClientIDKiro          = "kiro"
 )
 
 // AllClientIDs returns all known client IDs
 func AllClientIDs() []string {
-	return []string{ClientIDClaudeCode, ClientIDCursor, ClientIDCline, ClientIDGemini, ClientIDGitHubCopilot, ClientIDCodex, ClientIDOpenClaw}
+	return []string{ClientIDClaudeCode, ClientIDCursor, ClientIDCline, ClientIDGemini, ClientIDGitHubCopilot, ClientIDCodex, ClientIDOpenClaw, ClientIDKiro}
 }
 
 // IsValidClientID checks if the given ID is a known client ID
