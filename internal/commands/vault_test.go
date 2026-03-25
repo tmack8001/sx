@@ -959,8 +959,8 @@ func TestHelperFunctions(t *testing.T) {
 		}{
 			{"skill", "Skill", "Skill"},
 			{"mcp", "MCP Server", "MCP Server"},
-			{"custom", "", "Custom"},  // Fallback to capitalized key
-			{"", "", "Unknown"},       // Empty key and label
+			{"custom", "", "Custom"}, // Fallback to capitalized key
+			{"", "", "Unknown"},      // Empty key and label
 		}
 
 		for _, tc := range tests {

@@ -307,6 +307,10 @@ func printVaultListText(out *outputHelper, result *vaultpkg.ListAssetsResult, lf
 
 	for _, typeName := range types {
 		assets := byType[typeName]
+		// Sort assets by name within each type
+		sort.Slice(assets, func(i, j int) bool {
+			return assets[i].Name < assets[j].Name
+		})
 		uiOut.Bold(typeName + "s")
 		for _, assetInfo := range assets {
 			scopeInfo := ""
@@ -426,6 +430,10 @@ func printInstalledListText(out *outputHelper, assets []lockfile.Asset, typeFilt
 
 	for _, typeName := range types {
 		typeAssets := byType[typeName]
+		// Sort assets by name within each type
+		sort.Slice(typeAssets, func(i, j int) bool {
+			return typeAssets[i].Name < typeAssets[j].Name
+		})
 		uiOut.Bold(typeName + "s")
 		for _, a := range typeAssets {
 			scopeInfo := ""

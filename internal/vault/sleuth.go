@@ -582,7 +582,7 @@ func (s *SleuthVault) listAssetsByType(ctx context.Context, opts ListAssetsOptio
 		vault {
 			assets(%s) {
 				nodes {
-					name
+					slug
 					type
 					latestVersion
 					versionsCount
@@ -600,7 +600,7 @@ func (s *SleuthVault) listAssetsByType(ctx context.Context, opts ListAssetsOptio
 			Vault struct {
 				Assets struct {
 					Nodes []struct {
-						Name          string    `json:"name"`
+						Slug          string    `json:"slug"`
 						Type          string    `json:"type"`
 						LatestVersion string    `json:"latestVersion"`
 						VersionsCount int       `json:"versionsCount"`
@@ -631,7 +631,7 @@ func (s *SleuthVault) listAssetsByType(ctx context.Context, opts ListAssetsOptio
 
 	for _, node := range gqlResp.Data.Vault.Assets.Nodes {
 		result.Assets = append(result.Assets, AssetSummary{
-			Name:          node.Name,
+			Name:          node.Slug,
 			Type:          asset.FromString(strings.ToLower(node.Type)),
 			LatestVersion: node.LatestVersion,
 			VersionsCount: node.VersionsCount,
