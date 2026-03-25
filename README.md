@@ -154,7 +154,7 @@ sx uses a lock file (like package-lock.json) for deterministic installations acr
 | Gemini (CLI/VS Code)    | ✅ Experimental | Skills, rules, commands, MCP servers, hooks               |
 | Gemini (JetBrains)      | ✅ Experimental | Rules, MCP servers only (no commands/hooks)               |
 | Gemini (Android Studio) | ✅ Experimental | Rules, MCP-remote only (HTTP, no stdio)                   |
-| Kiro                    | ✅ Experimental | Skills, rules, MCP servers                                |
+| Kiro                    | ✅ Experimental | Skills, rules, commands, MCP servers                      |
 
 
 ## Roadmap
@@ -188,6 +188,7 @@ See LICENSE file for details.
 - [MCP Spec](docs/mcp-spec.md) - MCP server and query tool
 - [Scoping](docs/scoping.md) - Controlling where assets are installed
 - [Profiles](docs/profiles.md) - Multiple configuration profiles
+- [Clients](docs/clients.md) - Client support model and IDE vs CLI limitations
 
 
 ### Prerequisites
