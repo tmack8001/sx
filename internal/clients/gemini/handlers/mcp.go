@@ -8,8 +8,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tailscale/hujson"
-
 	"github.com/sleuth-io/sx/internal/metadata"
 	"github.com/sleuth-io/sx/internal/utils"
 )
@@ -248,12 +246,9 @@ func ReadSettingsJSON(path string) (*SettingsJSON, error) {
 		return nil, err
 	}
 
-	// Gemini config is shared between CLI and VS Code; users may edit with JSONC features.
-	data, _ = hujson.Standardize(data)
-
 	// First, unmarshal into a generic map to preserve unknown fields
 	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := utils.UnmarshalJSONC(data, &raw); err != nil {
 		return nil, err
 	}
 

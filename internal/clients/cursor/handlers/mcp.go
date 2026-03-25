@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tailscale/hujson"
-
 	"github.com/sleuth-io/sx/internal/asset"
 	"github.com/sleuth-io/sx/internal/handlers/dirasset"
 	"github.com/sleuth-io/sx/internal/metadata"
@@ -160,11 +158,7 @@ func ReadMCPConfig(path string) (*MCPConfig, error) {
 		return nil, err
 	}
 
-	// Cursor is a VS Code fork whose editor treats JSON files as JSONC,
-	// allowing comments and trailing commas. Sanitize before parsing.
-	data, _ = hujson.Standardize(data)
-
-	if err := json.Unmarshal(data, config); err != nil {
+	if err := utils.UnmarshalJSONC(data, config); err != nil {
 		return nil, err
 	}
 
