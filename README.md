@@ -146,27 +146,27 @@ sx uses a lock file (like package-lock.json) for deterministic installations acr
 
 | Client                  | Status         | Notes                                                     |
 |-------------------------|----------------|-----------------------------------------------------------|
-| Claude Code             | ✅ Supported    | Full support for all asset types                          |
-| Cline                   | ✅ Experimental | Skills, rules, workflows as commands, MCP servers, hooks  |
-| Codex                   | ✅ Experimental | Skills, commands, MCP servers                             |
-| Cursor                  | ✅ Experimental | Skills, rules, commands, MCP servers, hooks               |
-| GitHub Copilot          | ✅ Experimental | Skills, rules, commands, agents, MCP servers, local hooks |
-| Gemini (CLI/VS Code)    | ✅ Experimental | Skills, rules, commands, MCP servers, hooks               |
-| Gemini (JetBrains)      | ✅ Experimental | Rules, MCP servers only (no commands/hooks)               |
-| Gemini (Android Studio) | ✅ Experimental | Rules, MCP-remote only (HTTP, no stdio)                   |
-| Kiro                    | ✅ Experimental | Skills, rules, commands, MCP servers                      |
+| Claude Code             | ✅ Supported   | Full support for all asset types                          |
+| Cline                   | ✅ Supported   | Skills, rules, workflows as commands, MCP servers, hooks  |
+| Codex                   | ✅ Supported   | Skills, commands, MCP servers                             |
+| Cursor                  | ✅ Supported   | Skills, rules, commands, MCP servers, hooks               |
+| GitHub Copilot          | ✅ Supported   | Skills, rules, commands, agents, MCP servers, local hooks |
+| Gemini (CLI/VS Code)    | ✅ Supported   | Skills, rules, commands, MCP servers, hooks               |
+| Gemini (JetBrains)      | ✅ Supported   | Rules, MCP servers only (no commands/hooks)               |
+| Gemini (Android Studio) | ✅ Supported   | Rules, MCP-remote only (HTTP, no stdio)                   |
+| Kiro                    | ✅ Supported   | Skills, rules, commands, MCP servers                      |
 
 
 ## Roadmap
 - ✅ Local, Git, and Skills.new vaults
 - ✅ Claude Code support
-- ✅ Cline support (experimental)
-- ✅ Cursor support (experimental)
-- ✅ GitHub Copilot support (experimental)
-- ✅ Gemini support (experimental)
-- ✅ Codex support (experimental)
-- ✅ Kiro support (experimental)
-- **Skill discovery** - Use Skills.new to discover relevant skills from your code and architecture
+- ✅ Cline support
+- ✅ Cursor support
+- ✅ GitHub Copilot support
+- ✅ Gemini support
+- ✅ Codex support
+- ✅ Kiro support
+- ✅ Skill discovery - Use Skills.new to discover relevant skills from your code and architecture
 - **Analytics** - Track skill usage and impact
 
 ## License
