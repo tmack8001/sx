@@ -112,6 +112,15 @@ func addFromSkillsSh(cmd *cobra.Command, input string, opts addOptions) error {
 			return runAddWithFlags(cmd, treeURL, opts)
 		}
 
+		// Only fall through to other asset directories if the error indicates "not found".
+		// Network errors, rate limiting, etc. should be surfaced immediately.
+		if !strings.Contains(err.Error(), "could not find skill") &&
+			!strings.Contains(err.Error(), "not found") &&
+			!strings.Contains(err.Error(), "HTTP 404") {
+			status.Fail("Failed to resolve asset")
+			return fmt.Errorf("failed to resolve asset %s: %w", assetName, err)
+		}
+
 		// Not found in skills/ — search other asset directories.
 		found, searchErr := resolveAssetDirectory(ctx, owner, repo, branch, assetName)
 		if searchErr != nil {
@@ -245,7 +254,8 @@ func resolveDefaultBranch(ctx context.Context, owner, repo string) (string, erro
 // listRepoAssets lists all assets across known asset directories in a GitHub repo.
 // Uses a single Git Trees API call to fetch the entire repo tree, then filters client-side.
 func listRepoAssets(ctx context.Context, owner, repo, branch string) ([]repoAsset, error) {
-	tree, err := fetchGitTree(ctx, owner, repo, branch)
+	fetcher := github.NewFetcher()
+	tree, err := fetcher.FetchGitTree(ctx, owner, repo, branch)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +264,8 @@ func listRepoAssets(ctx context.Context, owner, repo, branch string) ([]repoAsse
 
 // resolveAssetDirectory searches all asset directories for an asset by name.
 func resolveAssetDirectory(ctx context.Context, owner, repo, branch, assetName string) (*repoAsset, error) {
-	tree, err := fetchGitTree(ctx, owner, repo, branch)
+	fetcher := github.NewFetcher()
+	tree, err := fetcher.FetchGitTree(ctx, owner, repo, branch)
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +279,7 @@ func resolveAssetDirectory(ctx context.Context, owner, repo, branch, assetName s
 
 // assetsFromTree extracts assets from a git tree by matching known asset directory patterns.
 // Matches entries like "skills/foo" (dir) or "agents/bar.md" (file) at exactly one level deep.
-func assetsFromTree(tree []gitTreeEntry) []repoAsset {
+func assetsFromTree(tree []github.GitTreeEntry) []repoAsset {
 	// Build lookup: asset dir name -> type label
 	dirToType := make(map[string]string, len(assetDirTypes))
 	for _, dt := range assetDirTypes {
@@ -294,41 +305,4 @@ func assetsFromTree(tree []gitTreeEntry) []repoAsset {
 		}
 	}
 	return assets
-}
-
-// gitTreeEntry represents an item from the GitHub Git Trees API.
-type gitTreeEntry struct {
-	Path string `json:"path"`
-	Type string `json:"type"` // "blob" or "tree"
-}
-
-// fetchGitTree fetches the full repo tree in a single API call.
-func fetchGitTree(ctx context.Context, owner, repo, ref string) ([]gitTreeEntry, error) {
-	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/trees/%s?recursive=1", owner, repo, ref)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", buildinfo.GetUserAgent())
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("GitHub API error %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		Tree []gitTreeEntry `json:"tree"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
-	}
-	return result.Tree, nil
 }

@@ -219,12 +219,18 @@ func downloadSingleFileFromGitHub(ctx context.Context, status *components.Status
 	switch *detectedType {
 	case asset.TypeRule:
 		// Write to temp file for rule processing
-		tmpFile := filepath.Join(os.TempDir(), fileName)
-		if err := os.WriteFile(tmpFile, content, 0o644); err != nil {
-			return nil, err
+		tmpFile, err := os.CreateTemp("", "sx-rule-*-"+fileName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create temp file: %w", err)
 		}
-		defer os.Remove(tmpFile)
-		return createZipFromRuleFile(tmpFile)
+		tmpPath := tmpFile.Name()
+		defer os.Remove(tmpPath)
+		if _, err := tmpFile.Write(content); err != nil {
+			tmpFile.Close()
+			return nil, fmt.Errorf("failed to write temp file: %w", err)
+		}
+		tmpFile.Close()
+		return createZipFromRuleFile(tmpPath)
 	case asset.TypeAgent, asset.TypeCommand, asset.TypeSkill:
 		return createZipFromPromptFile(fileName, *detectedType, content)
 	default:
