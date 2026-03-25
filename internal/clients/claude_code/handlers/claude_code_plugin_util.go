@@ -429,6 +429,27 @@ func ResolveMarketplacePluginPathFromFile(knownMarketsPath, marketplaceName, plu
 		return "", fmt.Errorf("marketplace %q installation directory not found: %s", marketplaceName, marketplace.InstallLocation)
 	}
 
+	// Check marketplace.json for plugin source declarations (e.g., source: "./")
+	marketplaceJSONPath := filepath.Join(marketplace.InstallLocation, ".claude-plugin", "marketplace.json")
+	if mjData, err := os.ReadFile(marketplaceJSONPath); err == nil {
+		var mj struct {
+			Plugins []struct {
+				Name   string `json:"name"`
+				Source string `json:"source"`
+			} `json:"plugins"`
+		}
+		if err := json.Unmarshal(mjData, &mj); err == nil {
+			for _, p := range mj.Plugins {
+				if p.Name == pluginName {
+					resolved := filepath.Join(marketplace.InstallLocation, p.Source)
+					if utils.IsDirectory(resolved) {
+						return resolved, nil
+					}
+				}
+			}
+		}
+	}
+
 	pluginPaths := []string{
 		filepath.Join(marketplace.InstallLocation, "plugins", pluginName),
 		filepath.Join(marketplace.InstallLocation, "external_plugins", pluginName),
