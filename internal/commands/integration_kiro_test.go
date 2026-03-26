@@ -139,19 +139,11 @@ prompt-file = "SKILL.md"
 		t.Errorf("Skill file content doesn't match expected content. Got: %s", string(content))
 	}
 
-	// Verify steering file was created (Kiro uses shimming for skills)
+	// Verify steering file is NOT created (Kiro auto-discovers skills from .kiro/skills/)
 	localKiroDir := filepath.Join(workingDir, ".kiro")
 	steeringFile := filepath.Join(localKiroDir, "steering", "skills.md")
-	if _, err := os.Stat(steeringFile); os.IsNotExist(err) {
-		t.Errorf("Steering file should exist for skills shimming: %s", steeringFile)
-	} else {
-		// Verify steering file contains the skill
-		steeringContent, err := os.ReadFile(steeringFile)
-		if err != nil {
-			t.Errorf("Failed to read steering file: %v", err)
-		} else if !strings.Contains(string(steeringContent), "test-skill") {
-			t.Errorf("Steering file doesn't contain skill. Got: %s", string(steeringContent))
-		}
+	if _, err := os.Stat(steeringFile); err == nil {
+		t.Errorf("Steering file should not exist (Kiro auto-discovers skills): %s", steeringFile)
 	}
 
 	// Verify MCP server was registered in ~/.kiro/settings/mcp.json (global scope)

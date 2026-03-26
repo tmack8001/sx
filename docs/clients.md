@@ -25,7 +25,7 @@ Many AI tools ship in two forms: a **desktop IDE** and a **CLI**. These often ha
 Clients marked as **Experimental** in the README have working implementations, but may have gaps where the client's file format is undocumented, subject to change, or where certain asset types don't map cleanly to the client's native concepts.
 
 If an asset type is not listed as supported for a client, it's either because:
-- The client has no file-based equivalent (e.g. Kiro IDE hooks are UI-configured only)
+- The client has no file-based equivalent
 - The format is unknown or unstable
 - It hasn't been implemented yet
 

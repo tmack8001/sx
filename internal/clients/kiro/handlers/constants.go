@@ -13,4 +13,5 @@ const (
 	DirSettings   = "settings"
 	DirMCPServers = "mcp-servers"
 	DirPrompts    = "prompts"
+	DirHooks      = "hooks"
 )
