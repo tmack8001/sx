@@ -12,26 +12,6 @@ import (
 	"github.com/sleuth-io/sx/internal/logger"
 )
 
-// kiroHookFile represents the JSON structure of a .kiro.hook file
-type kiroHookFile struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Version     string       `json:"version"`
-	When        kiroHookWhen `json:"when"`
-	Then        kiroHookThen `json:"then"`
-}
-
-// kiroHookWhen represents the trigger condition for a hook
-type kiroHookWhen struct {
-	Type string `json:"type"`
-}
-
-// kiroHookThen represents the action to take when a hook fires
-type kiroHookThen struct {
-	Type    string `json:"type"`
-	Command string `json:"command"`
-}
-
 const (
 	hookFileInstall     = "sx-install.kiro.hook"
 	hookFileReportUsage = "sx-report-usage.kiro.hook"
@@ -49,16 +29,16 @@ func installKiroHooks(repoRoot string, opts []bootstrap.Option) error {
 
 	modified := false
 
-	// Install promptSubmit hook for auto-update (if enabled)
+	// Install sessionStart hook for auto-update (if enabled)
 	if bootstrap.ContainsKey(opts, bootstrap.SessionHookKey) {
 		hookPath := filepath.Join(hooksDir, hookFileInstall)
 		if !hookFileHasCommand(hookPath, "sx install") {
-			hook := kiroHookFile{
+			hook := handlers.KiroHookFile{
 				Name:        "sx install",
 				Description: "Auto-update sx assets when a session starts",
 				Version:     "1",
-				When:        kiroHookWhen{Type: "sessionStart"},
-				Then: kiroHookThen{
+				When:        handlers.KiroHookWhen{Type: "sessionStart"},
+				Then: handlers.KiroHookThen{
 					Type:    "runCommand",
 					Command: "sx install --hook-mode --client=kiro",
 				},
@@ -66,7 +46,7 @@ func installKiroHooks(repoRoot string, opts []bootstrap.Option) error {
 			if err := writeKiroHookFile(hookPath, hook); err != nil {
 				return err
 			}
-			log.Info("hook installed", "hook", "promptSubmit", "file", hookFileInstall)
+			log.Info("hook installed", "hook", "sessionStart", "file", hookFileInstall)
 			modified = true
 		}
 	}
@@ -75,12 +55,12 @@ func installKiroHooks(repoRoot string, opts []bootstrap.Option) error {
 	if bootstrap.ContainsKey(opts, bootstrap.AnalyticsHookKey) {
 		hookPath := filepath.Join(hooksDir, hookFileReportUsage)
 		if !hookFileHasCommand(hookPath, "sx report-usage") {
-			hook := kiroHookFile{
+			hook := handlers.KiroHookFile{
 				Name:        "sx report-usage",
 				Description: "Track skill usage for analytics",
 				Version:     "1",
-				When:        kiroHookWhen{Type: "postToolUse"},
-				Then: kiroHookThen{
+				When:        handlers.KiroHookWhen{Type: "postToolUse"},
+				Then: handlers.KiroHookThen{
 					Type:    "runCommand",
 					Command: "sx report-usage --client=kiro",
 				},
@@ -125,7 +105,7 @@ func uninstallKiroHooks(repoRoot string, uninstallSession, uninstallAnalytics bo
 }
 
 // writeKiroHookFile writes a .kiro.hook JSON file
-func writeKiroHookFile(path string, hook kiroHookFile) error {
+func writeKiroHookFile(path string, hook handlers.KiroHookFile) error {
 	data, err := json.MarshalIndent(hook, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal hook file: %w", err)
@@ -145,7 +125,7 @@ func hookFileHasCommand(path string, commandPrefix string) bool {
 		return false
 	}
 
-	var hook kiroHookFile
+	var hook handlers.KiroHookFile
 	if err := json.Unmarshal(data, &hook); err != nil {
 		return false
 	}
@@ -165,11 +145,13 @@ func findGitRoot() string {
 	for {
 		gitDir := filepath.Join(dir, ".git")
 		if _, err := os.Stat(gitDir); err == nil {
+			// .git can be a directory (normal repo) or a file (worktree with gitdir: pointer)
 			return dir
 		}
 
 		parent := filepath.Dir(dir)
 		if parent == dir {
+			// Reached root without finding .git
 			return ""
 		}
 		dir = parent

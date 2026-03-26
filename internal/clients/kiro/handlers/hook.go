@@ -27,22 +27,22 @@ var kiroEventMap = map[string]string{
 	"stop":                  "agentStop",
 }
 
-// kiroHookFile represents the JSON structure of a .kiro.hook file
-type kiroHookFile struct {
+// KiroHookFile represents the JSON structure of a .kiro.hook file
+type KiroHookFile struct {
 	Name        string       `json:"name"`
 	Description string       `json:"description"`
 	Version     string       `json:"version"`
-	When        kiroHookWhen `json:"when"`
-	Then        kiroHookThen `json:"then"`
+	When        KiroHookWhen `json:"when"`
+	Then        KiroHookThen `json:"then"`
 }
 
-// kiroHookWhen represents the trigger condition for a hook
-type kiroHookWhen struct {
+// KiroHookWhen represents the trigger condition for a hook
+type KiroHookWhen struct {
 	Type string `json:"type"`
 }
 
-// kiroHookThen represents the action to take when a hook fires
-type kiroHookThen struct {
+// KiroHookThen represents the action to take when a hook fires
+type KiroHookThen struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`
 }
@@ -113,7 +113,7 @@ func (h *HookHandler) VerifyInstalled(targetBase string) (bool, string) {
 	}
 
 	// Verify it's a valid hook file with our asset name
-	var hookFile kiroHookFile
+	var hookFile KiroHookFile
 	if err := json.Unmarshal(data, &hookFile); err != nil {
 		return false, "failed to parse hook file: " + err.Error()
 	}
@@ -151,12 +151,12 @@ func (h *HookHandler) writeHookFile(targetBase string) error {
 	installDir := filepath.Join(targetBase, DirHooks, h.metadata.Asset.Name)
 	resolved := hook.ResolveCommand(h.metadata.Hook, installDir, h.zipFiles)
 
-	hookFile := kiroHookFile{
+	hookFile := KiroHookFile{
 		Name:        h.metadata.Asset.Name,
 		Description: h.metadata.Asset.Description,
 		Version:     "1",
-		When:        kiroHookWhen{Type: kiroEvent},
-		Then: kiroHookThen{
+		When:        KiroHookWhen{Type: kiroEvent},
+		Then: KiroHookThen{
 			Type:    "runCommand",
 			Command: resolved.Command,
 		},

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/sleuth-io/sx/internal/clients"
 	"github.com/sleuth-io/sx/internal/clients/kiro"
+	"github.com/sleuth-io/sx/internal/clients/kiro/handlers"
 )
 
 func init() {
@@ -415,4 +417,135 @@ This is a test rule for TypeScript files.
 	}
 
 	t.Log("OK Kiro rule integration test passed!")
+}
+
+// TestKiroBootstrapInstall tests that bootstrap hooks are installed
+// as .kiro.hook files in .kiro/hooks/
+func TestKiroBootstrapInstall(t *testing.T) {
+	env := NewTestEnv(t)
+
+	// Create a git repo so findGitRoot() works
+	repoDir := filepath.Join(env.TempDir, "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0755); err != nil {
+		t.Fatalf("Failed to create git directory: %v", err)
+	}
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("Failed to chdir to repo: %v", err)
+	}
+
+	hooksDir := filepath.Join(repoDir, handlers.ConfigDir, handlers.DirHooks)
+
+	client := kiro.NewClient()
+	opts := client.GetBootstrapOptions(context.Background())
+
+	// Verify options include session and analytics hooks
+	hasSession := false
+	hasAnalytics := false
+	for _, opt := range opts {
+		if opt.Key == "session_hook" {
+			hasSession = true
+		}
+		if opt.Key == "analytics_hook" {
+			hasAnalytics = true
+		}
+	}
+	if !hasSession {
+		t.Error("Expected session_hook option")
+	}
+	if !hasAnalytics {
+		t.Error("Expected analytics_hook option")
+	}
+
+	// Install bootstrap
+	if err := client.InstallBootstrap(context.Background(), opts); err != nil {
+		t.Fatalf("Failed to install bootstrap: %v", err)
+	}
+
+	// Verify sx-install.kiro.hook was created
+	installHookPath := filepath.Join(hooksDir, "sx-install.kiro.hook")
+	env.AssertFileExists(installHookPath)
+
+	content, err := os.ReadFile(installHookPath)
+	if err != nil {
+		t.Fatalf("Failed to read install hook file: %v", err)
+	}
+
+	var installHook handlers.KiroHookFile
+	if err := json.Unmarshal(content, &installHook); err != nil {
+		t.Fatalf("Failed to parse install hook file: %v", err)
+	}
+
+	if installHook.When.Type != "sessionStart" {
+		t.Errorf("Install hook when.type = %q, want %q", installHook.When.Type, "sessionStart")
+	}
+	if installHook.Then.Command != "sx install --hook-mode --client=kiro" {
+		t.Errorf("Install hook command = %q, want %q", installHook.Then.Command, "sx install --hook-mode --client=kiro")
+	}
+	if installHook.Then.Type != "runCommand" {
+		t.Errorf("Install hook then.type = %q, want %q", installHook.Then.Type, "runCommand")
+	}
+
+	// Verify sx-report-usage.kiro.hook was created
+	reportHookPath := filepath.Join(hooksDir, "sx-report-usage.kiro.hook")
+	env.AssertFileExists(reportHookPath)
+
+	content, err = os.ReadFile(reportHookPath)
+	if err != nil {
+		t.Fatalf("Failed to read report hook file: %v", err)
+	}
+
+	var reportHook handlers.KiroHookFile
+	if err := json.Unmarshal(content, &reportHook); err != nil {
+		t.Fatalf("Failed to parse report hook file: %v", err)
+	}
+
+	if reportHook.When.Type != "postToolUse" {
+		t.Errorf("Report hook when.type = %q, want %q", reportHook.When.Type, "postToolUse")
+	}
+	if reportHook.Then.Command != "sx report-usage --client=kiro" {
+		t.Errorf("Report hook command = %q, want %q", reportHook.Then.Command, "sx report-usage --client=kiro")
+	}
+}
+
+// TestKiroBootstrapUninstall tests that bootstrap hooks are removed
+// when uninstalled.
+func TestKiroBootstrapUninstall(t *testing.T) {
+	env := NewTestEnv(t)
+
+	// Create a git repo so findGitRoot() works
+	repoDir := filepath.Join(env.TempDir, "repo")
+	if err := os.MkdirAll(filepath.Join(repoDir, ".git"), 0755); err != nil {
+		t.Fatalf("Failed to create git directory: %v", err)
+	}
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatalf("Failed to chdir to repo: %v", err)
+	}
+
+	client := kiro.NewClient()
+	opts := client.GetBootstrapOptions(context.Background())
+
+	// Install first
+	if err := client.InstallBootstrap(context.Background(), opts); err != nil {
+		t.Fatalf("Failed to install bootstrap: %v", err)
+	}
+
+	hooksDir := filepath.Join(repoDir, handlers.ConfigDir, handlers.DirHooks)
+	installHookPath := filepath.Join(hooksDir, "sx-install.kiro.hook")
+	reportHookPath := filepath.Join(hooksDir, "sx-report-usage.kiro.hook")
+
+	env.AssertFileExists(installHookPath)
+	env.AssertFileExists(reportHookPath)
+
+	// Now uninstall
+	if err := client.UninstallBootstrap(context.Background(), opts); err != nil {
+		t.Fatalf("Failed to uninstall bootstrap: %v", err)
+	}
+
+	// Verify hook files were removed
+	if _, err := os.Stat(installHookPath); !os.IsNotExist(err) {
+		t.Error("sx-install.kiro.hook should be removed after uninstall")
+	}
+	if _, err := os.Stat(reportHookPath); !os.IsNotExist(err) {
+		t.Error("sx-report-usage.kiro.hook should be removed after uninstall")
+	}
 }

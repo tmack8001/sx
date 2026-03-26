@@ -33,13 +33,13 @@ func createTestHookZip(t *testing.T, files map[string]string) []byte {
 	return buf.Bytes()
 }
 
-func readKiroHookFile(t *testing.T, path string) kiroHookFile {
+func readKiroHookFile(t *testing.T, path string) KiroHookFile {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("Failed to read hook file: %v", err)
 	}
-	var hookFile kiroHookFile
+	var hookFile KiroHookFile
 	if err := json.Unmarshal(data, &hookFile); err != nil {
 		t.Fatalf("Failed to parse hook file: %v", err)
 	}
@@ -251,11 +251,11 @@ func TestHookHandler_Remove(t *testing.T) {
 
 	// Pre-populate hook file and extracted directory
 	hookFilePath := filepath.Join(hooksDir, "lint-hook.kiro.hook")
-	hookData, _ := json.MarshalIndent(kiroHookFile{
+	hookData, _ := json.MarshalIndent(KiroHookFile{
 		Name:    "lint-hook",
 		Version: "1",
-		When:    kiroHookWhen{Type: "preToolUse"},
-		Then:    kiroHookThen{Type: "runCommand", Command: "echo lint"},
+		When:    KiroHookWhen{Type: "preToolUse"},
+		Then:    KiroHookThen{Type: "runCommand", Command: "echo lint"},
 	}, "", "  ")
 	os.WriteFile(hookFilePath, hookData, 0644)
 
@@ -306,11 +306,11 @@ func TestHookHandler_VerifyInstalled_CommandMode(t *testing.T) {
 
 	// Write hook file
 	hookFilePath := filepath.Join(hooksDir, "cmd-hook.kiro.hook")
-	hookData, _ := json.MarshalIndent(kiroHookFile{
+	hookData, _ := json.MarshalIndent(KiroHookFile{
 		Name:    "cmd-hook",
 		Version: "1",
-		When:    kiroHookWhen{Type: "preToolUse"},
-		Then:    kiroHookThen{Type: "runCommand", Command: "echo test"},
+		When:    KiroHookWhen{Type: "preToolUse"},
+		Then:    KiroHookThen{Type: "runCommand", Command: "echo test"},
 	}, "", "  ")
 	os.WriteFile(hookFilePath, hookData, 0644)
 
