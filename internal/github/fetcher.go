@@ -174,6 +174,13 @@ func (f *Fetcher) downloadAndZip(ctx context.Context, treeURL *TreeURL, files []
 	return buf.Bytes(), nil
 }
 
+// FetchFile downloads a single file from a GitHub blob URL and returns its content.
+func (f *Fetcher) FetchFile(ctx context.Context, parsed *TreeURL) ([]byte, error) {
+	rawURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s",
+		parsed.Owner, parsed.Repo, parsed.Ref, parsed.Path)
+	return f.downloadFile(ctx, rawURL)
+}
+
 // downloadFile downloads a single file from a URL.
 func (f *Fetcher) downloadFile(ctx context.Context, url string) ([]byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -202,6 +209,48 @@ func (f *Fetcher) setHeaders(req *http.Request) {
 	if f.token != "" {
 		req.Header.Set("Authorization", "Bearer "+f.token)
 	}
+}
+
+// GitTreeEntry represents an item from the GitHub Git Trees API.
+type GitTreeEntry struct {
+	Path string `json:"path"`
+	Type string `json:"type"` // "blob" or "tree"
+}
+
+// FetchGitTree fetches the full repo tree in a single API call.
+// Returns an error if GitHub indicates the tree was truncated (repos with >100k entries).
+func (f *Fetcher) FetchGitTree(ctx context.Context, owner, repo, ref string) ([]GitTreeEntry, error) {
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/trees/%s?recursive=1", owner, repo, ref)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	f.setHeaders(req)
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+	resp, err := f.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("GitHub API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Tree      []GitTreeEntry `json:"tree"`
+		Truncated bool           `json:"truncated"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	if result.Truncated {
+		return nil, fmt.Errorf("repository tree for %s/%s is too large (truncated by GitHub API); specify a specific asset name instead", owner, repo)
+	}
+	return result.Tree, nil
 }
 
 // ResolveSkillDirectory resolves the actual directory name for a skill in a repo.
