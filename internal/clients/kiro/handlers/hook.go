@@ -38,7 +38,8 @@ type KiroHookFile struct {
 
 // KiroHookWhen represents the trigger condition for a hook
 type KiroHookWhen struct {
-	Type string `json:"type"`
+	Type      string   `json:"type"`
+	ToolTypes []string `json:"toolTypes,omitempty"`
 }
 
 // KiroHookThen represents the action to take when a hook fires
@@ -151,11 +152,23 @@ func (h *HookHandler) writeHookFile(targetBase string) error {
 	installDir := filepath.Join(targetBase, DirHooks, h.metadata.Asset.Name)
 	resolved := hook.ResolveCommand(h.metadata.Hook, installDir, h.zipFiles)
 
+	// Extract tool-types from [hook.kiro] if present
+	var toolTypes []string
+	if h.metadata.Hook.Kiro != nil {
+		if tt, ok := h.metadata.Hook.Kiro["tool-types"].([]any); ok {
+			for _, t := range tt {
+				if s, ok := t.(string); ok {
+					toolTypes = append(toolTypes, s)
+				}
+			}
+		}
+	}
+
 	hookFile := KiroHookFile{
 		Name:        h.metadata.Asset.Name,
 		Description: h.metadata.Asset.Description,
 		Version:     "1",
-		When:        KiroHookWhen{Type: kiroEvent},
+		When:        KiroHookWhen{Type: kiroEvent, ToolTypes: toolTypes},
 		Then: KiroHookThen{
 			Type:    "runCommand",
 			Command: resolved.Command,

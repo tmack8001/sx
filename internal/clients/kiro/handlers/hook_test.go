@@ -287,6 +287,148 @@ func TestHookHandler_Remove(t *testing.T) {
 	}
 }
 
+func TestHookHandler_ToolTypes(t *testing.T) {
+	targetBase := t.TempDir()
+
+	meta := &metadata.Metadata{
+		Asset: metadata.Asset{
+			Name:        "tool-hook",
+			Version:     "1.0.0",
+			Type:        asset.TypeHook,
+			Description: "Hook with tool types",
+		},
+		Hook: &metadata.HookConfig{
+			Event:   "post-tool-use",
+			Command: "echo test",
+			Kiro: map[string]any{
+				"tool-types": []any{"readFile", "writeFile"},
+			},
+		},
+	}
+
+	zipData := createTestHookZip(t, map[string]string{
+		"metadata.toml": `[asset]
+name = "tool-hook"
+version = "1.0.0"
+type = "hook"
+
+[hook]
+event = "post-tool-use"
+command = "echo test"
+
+[hook.kiro]
+tool-types = ["readFile", "writeFile"]
+`,
+	})
+
+	handler := NewHookHandler(meta)
+	if err := handler.Install(context.Background(), zipData, targetBase); err != nil {
+		t.Fatalf("Install failed: %v", err)
+	}
+
+	// Verify .kiro.hook file was created with toolTypes
+	hookFilePath := filepath.Join(targetBase, DirHooks, "tool-hook.kiro.hook")
+	hookFile := readKiroHookFile(t, hookFilePath)
+
+	if hookFile.When.Type != "postToolUse" {
+		t.Errorf("when.type = %q, want %q", hookFile.When.Type, "postToolUse")
+	}
+	if len(hookFile.When.ToolTypes) != 2 {
+		t.Errorf("toolTypes length = %d, want 2", len(hookFile.When.ToolTypes))
+	}
+	if hookFile.When.ToolTypes[0] != "readFile" || hookFile.When.ToolTypes[1] != "writeFile" {
+		t.Errorf("toolTypes = %v, want [readFile, writeFile]", hookFile.When.ToolTypes)
+	}
+}
+
+func TestHookHandler_ToolTypes_Wildcard(t *testing.T) {
+	targetBase := t.TempDir()
+
+	meta := &metadata.Metadata{
+		Asset: metadata.Asset{
+			Name:    "wildcard-hook",
+			Version: "1.0.0",
+			Type:    asset.TypeHook,
+		},
+		Hook: &metadata.HookConfig{
+			Event:   "post-tool-use",
+			Command: "echo test",
+			Kiro: map[string]any{
+				"tool-types": []any{"*"},
+			},
+		},
+	}
+
+	zipData := createTestHookZip(t, map[string]string{
+		"metadata.toml": `[asset]
+name = "wildcard-hook"
+version = "1.0.0"
+type = "hook"
+
+[hook]
+event = "post-tool-use"
+command = "echo test"
+
+[hook.kiro]
+tool-types = ["*"]
+`,
+	})
+
+	handler := NewHookHandler(meta)
+	if err := handler.Install(context.Background(), zipData, targetBase); err != nil {
+		t.Fatalf("Install failed: %v", err)
+	}
+
+	hookFilePath := filepath.Join(targetBase, DirHooks, "wildcard-hook.kiro.hook")
+	hookFile := readKiroHookFile(t, hookFilePath)
+
+	if len(hookFile.When.ToolTypes) != 1 || hookFile.When.ToolTypes[0] != "*" {
+		t.Errorf("toolTypes = %v, want [*]", hookFile.When.ToolTypes)
+	}
+}
+
+func TestHookHandler_ToolTypes_NotSpecified(t *testing.T) {
+	targetBase := t.TempDir()
+
+	meta := &metadata.Metadata{
+		Asset: metadata.Asset{
+			Name:    "no-tooltype-hook",
+			Version: "1.0.0",
+			Type:    asset.TypeHook,
+		},
+		Hook: &metadata.HookConfig{
+			Event:   "post-tool-use",
+			Command: "echo test",
+			// No Kiro section
+		},
+	}
+
+	zipData := createTestHookZip(t, map[string]string{
+		"metadata.toml": `[asset]
+name = "no-tooltype-hook"
+version = "1.0.0"
+type = "hook"
+
+[hook]
+event = "post-tool-use"
+command = "echo test"
+`,
+	})
+
+	handler := NewHookHandler(meta)
+	if err := handler.Install(context.Background(), zipData, targetBase); err != nil {
+		t.Fatalf("Install failed: %v", err)
+	}
+
+	hookFilePath := filepath.Join(targetBase, DirHooks, "no-tooltype-hook.kiro.hook")
+	hookFile := readKiroHookFile(t, hookFilePath)
+
+	// When no tool-types specified, toolTypes should be nil/empty (omitted from JSON)
+	if len(hookFile.When.ToolTypes) != 0 {
+		t.Errorf("toolTypes should be empty when not specified, got %v", hookFile.When.ToolTypes)
+	}
+}
+
 func TestHookHandler_VerifyInstalled_CommandMode(t *testing.T) {
 	targetBase := t.TempDir()
 	hooksDir := filepath.Join(targetBase, DirHooks)
