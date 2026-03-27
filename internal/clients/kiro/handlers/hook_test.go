@@ -178,7 +178,6 @@ func TestHookHandler_EventMapping(t *testing.T) {
 		{"session-end", "sessionEnd"},
 		{"pre-tool-use", "preToolUse"},
 		{"post-tool-use", "postToolUse"},
-		{"post-tool-use-failure", "postToolUse"}, // Kiro doesn't distinguish
 		{"user-prompt-submit", "promptSubmit"},
 		{"stop", "agentStop"},
 	}
@@ -201,6 +200,7 @@ func TestHookHandler_EventMapping(t *testing.T) {
 
 func TestHookHandler_EventMapping_UnsupportedEvent(t *testing.T) {
 	unsupportedEvents := []string{
+		"post-tool-use-failure", // Kiro doesn't have failure-specific event
 		"subagent-start",
 		"subagent-stop",
 		"pre-compact",

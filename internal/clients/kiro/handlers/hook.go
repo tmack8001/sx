@@ -17,14 +17,16 @@ import (
 var hookOps = dirasset.NewOperations("hooks", &asset.TypeHook)
 
 // kiroEventMap maps canonical hook events to Kiro native event names
+// Note: post-tool-use-failure is intentionally NOT mapped - Kiro doesn't have
+// a failure-specific event, and mapping it to postToolUse would change semantics
+// (hook would fire on all tool uses, not just failures)
 var kiroEventMap = map[string]string{
-	"session-start":         "sessionStart",
-	"session-end":           "sessionEnd",
-	"pre-tool-use":          "preToolUse",
-	"post-tool-use":         "postToolUse",
-	"post-tool-use-failure": "postToolUse", // Kiro doesn't distinguish failure
-	"user-prompt-submit":    "promptSubmit",
-	"stop":                  "agentStop",
+	"session-start":      "sessionStart",
+	"session-end":        "sessionEnd",
+	"pre-tool-use":       "preToolUse",
+	"post-tool-use":      "postToolUse",
+	"user-prompt-submit": "promptSubmit",
+	"stop":               "agentStop",
 }
 
 // KiroHookFile represents the JSON structure of a .kiro.hook file
@@ -119,12 +121,13 @@ func (h *HookHandler) VerifyInstalled(targetBase string) (bool, string) {
 		return false, "failed to parse hook file: " + err.Error()
 	}
 
-	// Also verify extracted files if script-file mode was used
+	// If script-file mode was used, verify the extracted files exist
 	if h.metadata.Hook != nil && h.metadata.Hook.ScriptFile != "" {
 		installDir := filepath.Join(targetBase, DirHooks, h.metadata.Asset.Name)
-		if utils.IsDirectory(installDir) {
-			return hookOps.VerifyInstalled(targetBase, h.metadata.Asset.Name, h.metadata.Asset.Version)
+		if !utils.IsDirectory(installDir) {
+			return false, "script directory not found"
 		}
+		return hookOps.VerifyInstalled(targetBase, h.metadata.Asset.Name, h.metadata.Asset.Version)
 	}
 
 	return true, "installed"
