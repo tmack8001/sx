@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -58,6 +59,24 @@ type CodexNotifyEvent struct {
 	LastAssistantMessage string   `json:"last-assistant-message"`
 }
 
+// KiroPostToolUseEvent represents the JSON payload from Kiro postToolUse hook
+type KiroPostToolUseEvent struct {
+	ToolName   string `json:"toolName"`
+	ToolResult string `json:"toolResult"`
+}
+
+// kiroSkillPathRegex matches skill file paths in Kiro's readFile tool result
+var kiroSkillPathRegex = regexp.MustCompile(`<file name="\.kiro/skills/([^"]+)\.md"`)
+
+// extractKiroSkillName extracts the skill name from Kiro's readFile tool result
+func extractKiroSkillName(toolResult string) string {
+	matches := kiroSkillPathRegex.FindStringSubmatch(toolResult)
+	if len(matches) >= 2 {
+		return matches[1]
+	}
+	return ""
+}
+
 // runReportUsage executes the report-usage command
 func runReportUsage(cmd *cobra.Command, args []string) error {
 	// Initialize logger early to capture all errors
@@ -68,10 +87,13 @@ func runReportUsage(cmd *cobra.Command, args []string) error {
 	var data []byte
 	var err error
 
-	// Codex passes JSON as command-line argument, others use stdin
+	// Try different input methods based on client
 	if len(args) > 0 {
 		// Codex format: JSON as first argument
 		data = []byte(args[0])
+	} else if userPrompt := os.Getenv("USER_PROMPT"); userPrompt != "" {
+		// Kiro format: JSON in USER_PROMPT env var
+		data = []byte(userPrompt)
 	} else {
 		// Claude Code/Cursor format: JSON from stdin
 		data, err = io.ReadAll(os.Stdin)
@@ -81,11 +103,15 @@ func runReportUsage(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+// uncomment for debugging
+// 	log.Debug("report-usage: received", "data", string(data), "client", clientID)
+
 	// Empty input is not an error - just nothing to do
 	if len(data) == 0 {
 		log.Debug("report-usage: no data received, skipping")
 		return nil
 	}
+
 
 	// Try Codex format first (check for agent-turn-complete type)
 	// Codex's agent-turn-complete doesn't contain tool usage data, so skip it
@@ -101,7 +127,7 @@ func runReportUsage(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// If no tool name from Claude Code format, try Copilot format (camelCase)
+	// If no tool name from Claude Code format, try Copilot/Kiro format (camelCase)
 	if event.ToolName == "" {
 		var copilotEvent CopilotPostToolUseEvent
 		if err := json.Unmarshal(data, &copilotEvent); err == nil && copilotEvent.ToolName != "" {
@@ -113,6 +139,18 @@ func runReportUsage(cmd *cobra.Command, args []string) error {
 	// If no tool name, nothing to detect
 	if event.ToolName == "" {
 		return nil
+	}
+
+	// Kiro-specific detection: extract skill name from readFile tool result
+	if event.ToolName == "readFile" && clientID == "kiro" {
+		var kiroEvent KiroPostToolUseEvent
+		if err := json.Unmarshal(data, &kiroEvent); err == nil {
+			if skillName := extractKiroSkillName(kiroEvent.ToolResult); skillName != "" {
+				// Found a skill - set up for tracking
+				event.ToolName = "Skill"
+				event.ToolInput = map[string]any{"skill": skillName}
+			}
+		}
 	}
 
 	// Create all handlers for detection

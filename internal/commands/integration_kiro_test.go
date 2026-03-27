@@ -433,7 +433,7 @@ func TestKiroBootstrapInstall(t *testing.T) {
 		t.Fatalf("Failed to chdir to repo: %v", err)
 	}
 
-	hooksDir := filepath.Join(repoDir, handlers.ConfigDir, handlers.DirHooks)
+	agentsDir := filepath.Join(repoDir, handlers.ConfigDir, handlers.DirAgents)
 
 	client := kiro.NewClient()
 	opts := client.GetBootstrapOptions(context.Background())
@@ -461,49 +461,49 @@ func TestKiroBootstrapInstall(t *testing.T) {
 		t.Fatalf("Failed to install bootstrap: %v", err)
 	}
 
-	// Verify sx-install.kiro.hook was created
-	installHookPath := filepath.Join(hooksDir, "sx-install.kiro.hook")
-	env.AssertFileExists(installHookPath)
+	// Verify default.json was created in .kiro/agents/
+	agentConfigPath := filepath.Join(agentsDir, "default.json")
+	env.AssertFileExists(agentConfigPath)
 
-	content, err := os.ReadFile(installHookPath)
+	content, err := os.ReadFile(agentConfigPath)
 	if err != nil {
-		t.Fatalf("Failed to read install hook file: %v", err)
+		t.Fatalf("Failed to read agent config file: %v", err)
 	}
 
-	var installHook handlers.KiroHookFile
-	if err := json.Unmarshal(content, &installHook); err != nil {
-		t.Fatalf("Failed to parse install hook file: %v", err)
+	var config struct {
+		Name  string                       `json:"name"`
+		Hooks map[string][]json.RawMessage `json:"hooks"`
+	}
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse agent config file: %v", err)
 	}
 
-	if installHook.When.Type != "sessionStart" {
-		t.Errorf("Install hook when.type = %q, want %q", installHook.When.Type, "sessionStart")
-	}
-	if installHook.Then.Command != "sx install --hook-mode --client=kiro" {
-		t.Errorf("Install hook command = %q, want %q", installHook.Then.Command, "sx install --hook-mode --client=kiro")
-	}
-	if installHook.Then.Type != "runCommand" {
-		t.Errorf("Install hook then.type = %q, want %q", installHook.Then.Type, "runCommand")
-	}
-
-	// Verify sx-report-usage.kiro.hook was created
-	reportHookPath := filepath.Join(hooksDir, "sx-report-usage.kiro.hook")
-	env.AssertFileExists(reportHookPath)
-
-	content, err = os.ReadFile(reportHookPath)
-	if err != nil {
-		t.Fatalf("Failed to read report hook file: %v", err)
+	// Verify agentSpawn hook exists
+	spawnHooks, ok := config.Hooks["agentSpawn"]
+	if !ok || len(spawnHooks) == 0 {
+		t.Error("Expected agentSpawn hook")
+	} else {
+		var hook struct{ Command string }
+		if err := json.Unmarshal(spawnHooks[0], &hook); err != nil {
+			t.Fatalf("Failed to parse agentSpawn hook: %v", err)
+		}
+		if hook.Command != "sx install --hook-mode --client=kiro" {
+			t.Errorf("agentSpawn command = %q, want %q", hook.Command, "sx install --hook-mode --client=kiro")
+		}
 	}
 
-	var reportHook handlers.KiroHookFile
-	if err := json.Unmarshal(content, &reportHook); err != nil {
-		t.Fatalf("Failed to parse report hook file: %v", err)
-	}
-
-	if reportHook.When.Type != "postToolUse" {
-		t.Errorf("Report hook when.type = %q, want %q", reportHook.When.Type, "postToolUse")
-	}
-	if reportHook.Then.Command != "sx report-usage --client=kiro" {
-		t.Errorf("Report hook command = %q, want %q", reportHook.Then.Command, "sx report-usage --client=kiro")
+	// Verify postToolUse hook exists
+	postToolHooks, ok := config.Hooks["postToolUse"]
+	if !ok || len(postToolHooks) == 0 {
+		t.Error("Expected postToolUse hook")
+	} else {
+		var hook struct{ Command string }
+		if err := json.Unmarshal(postToolHooks[0], &hook); err != nil {
+			t.Fatalf("Failed to parse postToolUse hook: %v", err)
+		}
+		if hook.Command != "sx report-usage --client=kiro" {
+			t.Errorf("postToolUse command = %q, want %q", hook.Command, "sx report-usage --client=kiro")
+		}
 	}
 }
 
@@ -529,23 +529,33 @@ func TestKiroBootstrapUninstall(t *testing.T) {
 		t.Fatalf("Failed to install bootstrap: %v", err)
 	}
 
-	hooksDir := filepath.Join(repoDir, handlers.ConfigDir, handlers.DirHooks)
-	installHookPath := filepath.Join(hooksDir, "sx-install.kiro.hook")
-	reportHookPath := filepath.Join(hooksDir, "sx-report-usage.kiro.hook")
+	agentsDir := filepath.Join(repoDir, handlers.ConfigDir, handlers.DirAgents)
+	agentConfigPath := filepath.Join(agentsDir, "default.json")
 
-	env.AssertFileExists(installHookPath)
-	env.AssertFileExists(reportHookPath)
+	env.AssertFileExists(agentConfigPath)
 
 	// Now uninstall
 	if err := client.UninstallBootstrap(context.Background(), opts); err != nil {
 		t.Fatalf("Failed to uninstall bootstrap: %v", err)
 	}
 
-	// Verify hook files were removed
-	if _, err := os.Stat(installHookPath); !os.IsNotExist(err) {
-		t.Error("sx-install.kiro.hook should be removed after uninstall")
+	// Verify hooks were removed from config (file still exists but hooks are empty)
+	content, err := os.ReadFile(agentConfigPath)
+	if err != nil {
+		t.Fatalf("Failed to read agent config after uninstall: %v", err)
 	}
-	if _, err := os.Stat(reportHookPath); !os.IsNotExist(err) {
-		t.Error("sx-report-usage.kiro.hook should be removed after uninstall")
+
+	var config struct {
+		Hooks map[string][]json.RawMessage `json:"hooks"`
+	}
+	if err := json.Unmarshal(content, &config); err != nil {
+		t.Fatalf("Failed to parse agent config after uninstall: %v", err)
+	}
+
+	if len(config.Hooks["agentSpawn"]) > 0 {
+		t.Error("agentSpawn hooks should be empty after uninstall")
+	}
+	if len(config.Hooks["postToolUse"]) > 0 {
+		t.Error("postToolUse hooks should be empty after uninstall")
 	}
 }

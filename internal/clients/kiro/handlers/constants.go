@@ -13,5 +13,6 @@ const (
 	DirSettings   = "settings"
 	DirMCPServers = "mcp-servers"
 	DirPrompts    = "prompts"
-	DirHooks      = "hooks"
+	DirHooks      = "hooks"  // IDE hooks
+	DirAgents     = "agents" // CLI hooks (inside agent config)
 )

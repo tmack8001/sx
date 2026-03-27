@@ -18,7 +18,7 @@ Many AI tools ship in two forms: a **desktop IDE** and a **CLI**. These often ha
 | Cursor         | IDE     | Full support                                                                                   |
 | Gemini         | CLI/IDE | Full support for CLI/VS Code; rules and MCP only (JetBrains); MCP-remote only (Android Studio) |
 | GitHub Copilot | IDE ext | Full support                                                                                   |
-| Kiro           | CLI+IDE | Full support for CLI; IDE rules/MCP work but skills may not integrate with IDE skill UI        |
+| Kiro           | CLI+IDE | Full support. See [Kiro-specific docs](kiro.md) for hook setup.                                |
 
 ## What "Experimental" means
 
