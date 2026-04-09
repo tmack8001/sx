@@ -2,7 +2,9 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -389,6 +391,66 @@ func TestExtractKiroSkillNames(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestReportUsageFlushesQueueSynchronously is the regression test for SK-416.
+//
+// On 3/27/26, the queue flush in runReportUsage was wrapped in `go func() { ... }()`
+// to avoid blocking Kiro hooks. But `report-usage` is a short-lived CLI command —
+// when runReportUsage returns, main() exits and the goroutine is killed before the
+// network call can complete, so events accumulated on disk and never reached the
+// server. This test asserts the flush happens synchronously, before runReportUsage
+// returns. The buggy version would set flushCalled to false (or only true after a
+// race-y delay) because the goroutine never gets to run.
+func TestReportUsageFlushesQueueSynchronously(t *testing.T) {
+	// Use an isolated cache dir so we don't read or mutate the real one
+	tempCacheDir := t.TempDir()
+	t.Setenv("SX_CACHE_DIR", tempCacheDir)
+
+	// Pre-populate the tracker with an asset that the synthetic event references.
+	// Without this, the detection path returns early (asset not installed) and
+	// the flush would never be reached even on a buggy build.
+	trackerJSON := `{"version":"3","assets":[{"name":"test-skill","version":"1.0.0","clients":["claude-code"]}]}`
+	trackerPath := filepath.Join(tempCacheDir, "installed.json")
+	if err := os.WriteFile(trackerPath, []byte(trackerJSON), 0644); err != nil {
+		t.Fatalf("failed to write fake tracker: %v", err)
+	}
+
+	// Replace the flush hook with one that records call ordering. The defer
+	// restores the real implementation so other tests aren't affected.
+	flushCalled := false
+	origFlush := flushUsageQueue
+	flushUsageQueue = func(ctx context.Context) error {
+		flushCalled = true
+		return nil
+	}
+	defer func() { flushUsageQueue = origFlush }()
+
+	// Synthesize a Claude Code PostToolUse event for our installed test skill.
+	// We pass the JSON as args[0] (Codex's input path) rather than via cmd.SetIn,
+	// because runReportUsage reads from os.Stdin directly and ignores cmd.InOrStdin.
+	// The Codex agent-turn-complete check is skipped because our event has no
+	// "type" field, so the code falls through to Claude Code parsing.
+	claudeJSON := `{"tool_name":"Skill","tool_input":{"skill":"test-skill"}}`
+
+	cmd := NewReportUsageCommand()
+	cmd.SetArgs([]string{claudeJSON})
+	cmd.SetErr(&bytes.Buffer{})
+	if err := cmd.Flags().Set("client", "claude-code"); err != nil {
+		t.Fatalf("failed to set client flag: %v", err)
+	}
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("report-usage execution failed: %v", err)
+	}
+
+	// The whole point of this test: by the time Execute() returns, the flush
+	// MUST have happened. The buggy goroutine version would let runReportUsage
+	// return before the flush ran, leaving flushCalled == false.
+	if !flushCalled {
+		t.Fatal("flushUsageQueue was not called before runReportUsage returned — " +
+			"regression: queue flush is async and will be killed when the CLI process exits")
 	}
 }
 

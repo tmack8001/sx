@@ -246,31 +246,36 @@ func runReportUsage(cmd *cobra.Command, args []string) error {
 	// Log successful usage tracking
 	log.Info("report-usage: asset usage tracked", "name", assetName, "version", assetVersion, "type", assetType)
 
-	// Try to flush queue asynchronously to avoid blocking Kiro hooks
-	// The event is already persisted to disk, so a failed flush is recoverable
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		// Load config to get repository
-		cfg, err := config.Load()
-		if err != nil {
-			log.Error("report-usage: failed to load config", "error", err)
-			return
-		}
-
-		// Create vault instance
-		vault, err := vaultpkg.NewFromConfig(cfg)
-		if err != nil {
-			log.Error("report-usage: failed to create vault", "error", err)
-			return
-		}
-
-		// Try to flush queue
-		if err := stats.FlushQueue(ctx, vault); err != nil {
-			log.Error("report-usage: failed to flush usage stats", "error", err)
-		}
-	}()
+	// Flush queue synchronously. This used to be wrapped in `go func()` to avoid
+	// blocking Kiro hooks, but `report-usage` is a short-lived CLI command — when
+	// runReportUsage returns, main() exits and the goroutine is killed before the
+	// network call can complete, so events accumulate on disk and never reach the
+	// server. Block on the flush with a bounded timeout instead.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := flushUsageQueue(ctx); err != nil {
+		log.Error("report-usage: failed to flush usage stats", "error", err)
+	}
 
 	return nil
+}
+
+// flushUsageQueue loads the config, builds a vault, and flushes the on-disk
+// usage queue to the server. It is a package-level var so tests can replace it
+// with a mock that records when (and whether) the flush happened — the goroutine
+// regression that broke usage stats on 3/28/26 only manifests if the flush runs
+// after runReportUsage has returned, so the test must be able to assert call
+// ordering.
+var flushUsageQueue = defaultFlushUsageQueue
+
+func defaultFlushUsageQueue(ctx context.Context) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	vault, err := vaultpkg.NewFromConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create vault: %w", err)
+	}
+	return stats.FlushQueue(ctx, vault)
 }
