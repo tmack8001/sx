@@ -20,7 +20,7 @@
 #   OPENCLAW_IMAGE          Docker image to use (default: ghcr.io/openclaw/openclaw:latest)
 #
 # Usage:
-#   SX_ENV_FILE=~/.env ./scripts/test-openclaw-docker.sh
+#   SX_ENV_FILE=./.env ./scripts/test-openclaw-docker.sh
 #
 set -euo pipefail
 
@@ -155,9 +155,9 @@ if [[ ! -f "$ENV_FILE" ]]; then
     exit 1
 fi
 export ANTHROPIC_API_KEY
-ANTHROPIC_API_KEY="$(grep '^ANTHROPIC_API_KEY=' "$ENV_FILE" | cut -d= -f2-)"
+ANTHROPIC_API_KEY="$(grep '^ANTHROPIC_API_KEY=' "$ENV_FILE" | cut -d= -f2- || true)"
 if [[ -z "$ANTHROPIC_API_KEY" ]]; then
-    error "ANTHROPIC_API_KEY not found in $ENV_FILE"
+    error "ANTHROPIC_API_KEY not found or empty in $ENV_FILE"
     exit 1
 fi
 info "API key source: $ENV_FILE (value not shown)"
