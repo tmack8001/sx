@@ -241,7 +241,7 @@ services:
       - ANTHROPIC_API_KEY
       - SX_CONFIG_DIR=/home/node/.config/sx
     ports:
-      - "18789:18789"
+      - "127.0.0.1:18789:18789"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18789/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -283,7 +283,7 @@ services:
       - ANTHROPIC_API_KEY
       - HOME=/home/node
     ports:
-      - "18789:18789"
+      - "127.0.0.1:18789:18789"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18789/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
