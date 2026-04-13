@@ -14,7 +14,14 @@
 # Prerequisites:
 #   - Docker + Docker Compose v2
 #   - sx binary built (make build)
-#   - API key in /home/mrdon/dev/pulse/.env (SLEUTH_CLAUDE_API_KEY)
+#
+# Environment variables:
+#   SX_ENV_FILE (required)  Path to a .env file containing SLEUTH_CLAUDE_API_KEY.
+#                           The key is exported as ANTHROPIC_API_KEY for the test container.
+#   OPENCLAW_IMAGE          Docker image to use (default: ghcr.io/openclaw/openclaw:latest)
+#
+# Usage:
+#   SX_ENV_FILE=~/.env ./scripts/test-openclaw-docker.sh
 #
 set -euo pipefail
 
@@ -143,7 +150,7 @@ if ! docker info >/dev/null 2>&1; then
 fi
 info "Docker: OK"
 
-ENV_FILE="/home/mrdon/dev/pulse/.env"
+ENV_FILE="${SX_ENV_FILE:?SX_ENV_FILE must be set to a .env file containing SLEUTH_CLAUDE_API_KEY}"
 if [[ ! -f "$ENV_FILE" ]]; then
     error "API key file not found: $ENV_FILE"
     exit 1
