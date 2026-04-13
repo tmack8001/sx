@@ -19,10 +19,19 @@
 #   SX_ENV_FILE (required)  Path to a .env file containing ANTHROPIC_API_KEY.
 #   OPENCLAW_IMAGE          Docker image to use (default: ghcr.io/openclaw/openclaw:latest)
 #
+# Flags:
+#   --interactive    Pause after setup so you can shell into the container
+#
 # Usage:
 #   SX_ENV_FILE=./.env ./scripts/test-openclaw-docker.sh
+#   SX_ENV_FILE=./.env ./scripts/test-openclaw-docker.sh --interactive
 #
 set -euo pipefail
+
+INTERACTIVE=false
+if [[ "${1:-}" == "--interactive" ]]; then
+    INTERACTIVE=true
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -315,6 +324,15 @@ for i in $(seq 1 120); do
     sleep 1
 done
 echo ""
+
+if [[ "$INTERACTIVE" == true ]]; then
+    step "Interactive mode — container is running"
+    info "Shell into the container with:"
+    info "  docker compose -f $TEST_DIR/docker-compose.yml exec openclaw-gateway bash"
+    info ""
+    info "Press Enter to continue with tests, or Ctrl+C to stop..."
+    read -r
+fi
 
 # ---------------------------------------------------------------------------
 # 5. Run onboarding (non-interactive)
