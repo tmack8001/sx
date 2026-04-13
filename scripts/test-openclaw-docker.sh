@@ -245,7 +245,7 @@ services:
     volumes:
       - $OPENCLAW_HOME:/home/node/.openclaw
       - $SX_BINARY:/usr/local/bin/sx:ro
-      - $VAULT_DIR:/vault:ro
+      - $VAULT_DIR:/vault
     environment:
       - ANTHROPIC_API_KEY
       - SX_CONFIG_DIR=/home/node/.config/sx
@@ -286,8 +286,8 @@ services:
     volumes:
       - $OPENCLAW_HOME:/home/node/.openclaw
       - $SX_BINARY:/usr/local/bin/sx:ro
-      - $VAULT_DIR:/vault:ro
-      - $TEST_DIR/container-sx-config:/home/node/.config/sx:ro
+      - $VAULT_DIR:/vault
+      - $TEST_DIR/container-sx-config:/home/node/.config/sx
     environment:
       - ANTHROPIC_API_KEY
       - HOME=/home/node
